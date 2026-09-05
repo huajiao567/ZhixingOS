@@ -1,25 +1,83 @@
 {
   "expo": {
-    "name": "app",
-    "slug": "app",
+    "name": "知行镜 ZhixingOS",
+    "slug": "zhixingos",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "scheme": "zhixingos",
+    "backgroundColor": "#0E1116",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "知行镜读取睡眠、步数、心率以理解你的生活节奏",
+        "NSCalendarsUsageDescription": "知行镜读取日历以了解你的时间安排",
+        "NSRemindersUsageDescription": "知行镜读取任务以了解你的待办事项"
+      }
     },
     "android": {
+      "package": "com.zhixingos.satori",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0E1116",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR"
+      ],
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/favicon.png",
+      "themeColor": "#0E1116",
+      "name": "知行镜 Satori"
+    },
+    "plugins": [
+      "expo-asset",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "知行镜仅在你主动选择时读取照片，用于生成由你确认的数字人候选",
+          "cameraPermission": false,
+          "microphonePermission": "知行镜仅在你主动按下录音时使用麦克风，录音默认保存在本机"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26,
+            "usesCleartextTraffic": true
+          },
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "知行镜读取日历以了解你的时间安排",
+          "remindersPermission": "知行镜读取任务以了解你的待办事项"
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "知行镜仅在你主动按下录音时使用麦克风，录音默认保存在本机",
+          "recordAudioAndroid": true,
+          "enableBackgroundPlayback": false,
+          "enableBackgroundRecording": false
+        }
+      ]
+    ]
   }
 }

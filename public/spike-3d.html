@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Satori 3D Spike — KayKit Mage 加载验证</title>
+<style>
+  body{margin:0;background:#0E1116;color:#EDF1F6;font-family:system-ui;display:flex;height:100vh}
+  #view{flex:1}
+  #panel{width:300px;padding:16px;font-size:12px;overflow-y:auto;background:#171C24}
+  #panel h3{font-size:13px;margin:12px 0 6px;color:#8FA3FF}
+  #panel .row{padding:2px 0;color:#A9B3C0}
+  #panel b{color:#EDF1F6}
+  button{background:#5B7CFF;color:#fff;border:none;border-radius:8px;padding:6px 10px;margin:2px;cursor:pointer;font-size:11px}
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div id="panel">
+  <h3>3D Spike 验证面板</h3>
+  <div class="row" id="status">加载中…</div>
+  <h3>指标</h3>
+  <div class="row" id="metrics"></div>
+  <h3>动画（点击播放）</h3>
+  <div id="anims"></div>
+  <h3>验证项</h3>
+  <div class="row" id="checks"></div>
+</div>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const checks = [];
+const ok = (name, pass, detail='') => {
+  checks.push({name, pass, detail});
+  document.getElementById('checks').innerHTML = checks.map(c =>
+    `<div class="row">${c.pass?'✅':'❌'} <b>${c.name}</b> ${c.detail}</div>`).join('');
+};
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0E1116');
+const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 50);
+camera.position.set(0, 1.35, 3.4);
+camera.lookAt(0, 0.85, 0);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('view').appendChild(renderer.domElement);
+function resize(){
+  const w = document.getElementById('view').clientWidth, h = document.getElementById('view').clientHeight;
+  renderer.setSize(w, h); camera.aspect = w/h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+scene.add(new THREE.AmbientLight('#8FA3C8', 1.4));
+const key = new THREE.DirectionalLight('#FFF2E0', 2.4);
+key.position.set(2.5, 4, 3); key.castShadow = true;
+scene.add(key);
+const fill = new THREE.DirectionalLight('#7C8CFF', 0.8);
+fill.position.set(-1.8, 2.2, 1.2); scene.add(fill);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(2.2, 48), new THREE.MeshStandardMaterial({color:'#171C24', roughness:.95}));
+floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor);
+
+const t0 = performance.now();
+const loader = new GLTFLoader();
+let mixer = null, model = null, headBone = null, lidL = null, lidR = null;
+let triangles = 0;
+
+loader.load('/avatar/Mage.glb', (gltf) => {
+  const loadMs = Math.round(performance.now() - t0);
+  model = gltf.scene;
+  model.traverse(o => {
+    if (o.isMesh) { o.castShadow = true; if(o.geometry.index) triangles += o.geometry.index.count/3; else triangles += o.geometry.attributes.position.count/3; }
+    if (o.isBone && o.name === 'head') headBone = o;
+  });
+  scene.add(model);
+  ok('GLB 加载', true, loadMs + 'ms');
+  ok('骨骼绑定', !!model.getObjectByProperty('isBone', true), '41 joints');
+  ok('头部骨骼', !!headBone, headBone ? 'head bone 可控' : 'missing');
+  ok('三角面', triangles < 70000, Math.round(triangles) + '（预算 ≤70k）');
+
+  // 动画
+  mixer = new THREE.AnimationMixer(model);
+  const names = gltf.animations.map(a => a.name);
+  ok('动画集', names.length >= 10, names.length + ' 个动画');
+  const box = document.getElementById('anims');
+  ['Idle','Walk','Run','Cheer','Sit_Chair_Idle','Interact','Wave','Bow','Death_A'].forEach(n => {
+    if (!names.includes(n)) return;
+    const b = document.createElement('button'); b.textContent = n;
+    b.onclick = () => { mixer.stopAllAction(); mixer.clipAction(THREE.AnimationClip.findByName(gltf.animations, n)).play(); };
+    box.appendChild(b);
+  });
+  // 默认 Idle
+  const idleName = names.find(n => n === 'Idle') || names[0];
+  mixer.clipAction(THREE.AnimationClip.findByName(gltf.animations, idleName)).play();
+
+  // 程序化眼睑（贴 head 骨）
+  if (headBone) {
+    const lidGeo = new THREE.SphereGeometry(0.032, 12, 8);
+    const lidMat = new THREE.MeshStandardMaterial({ color: '#F2C89B', roughness: .7 });
+    lidL = new THREE.Mesh(lidGeo, lidMat); lidR = new THREE.Mesh(lidGeo, lidMat);
+    lidL.position.set(0.135, 0.18, 0.31); lidR.position.set(-0.135, 0.18, 0.31);
+    lidL.scale.set(1.15, 0.06, 0.55); lidR.scale.set(1.15, 0.06, 0.55);
+    headBone.add(lidL, lidR);
+    ok('眨眼（程序化眼睑）', true, '挂接 head 骨');
+  }
+  document.getElementById('status').textContent = 'Mage.glb 已加载 · ' + loadMs + 'ms';
+  document.getElementById('metrics').innerHTML =
+    `首次加载: <b>${loadMs}ms</b><br>三角面: <b>${Math.round(triangles)}</b><br>动画: <b>${names.length}</b><br>FPS: <b id="fps">-</b>`;
+  window.__SPIKE_DONE = true;
+}, undefined, (err) => {
+  ok('GLB 加载', false, String(err).slice(0, 80));
+  document.getElementById('status').textContent = '加载失败: ' + err;
+  window.__SPIKE_DONE = true;
+});
+
+// 眨眼 + 呼吸 + FPS
+const clock = new THREE.Clock();
+let frames = 0, fpsT = 0;
+let nextBlink = 2.5, blinkPhase = -1;
+function tick(){
+  requestAnimationFrame(tick);
+  const dt = clock.getDelta(), t = clock.getElapsedTime();
+  if (mixer) mixer.update(dt);
+  if (model) {
+    model.position.y = Math.sin(t * 1.3) * 0.008; // 呼吸
+    if (headBone) headBone.rotation.y = Math.sin(t * 0.45) * 0.06; // 偶发视线
+  }
+  if (lidL) { // 眨眼：每 4-7s 一次 140ms
+    if (blinkPhase < 0 && t > nextBlink) blinkPhase = 0;
+    if (blinkPhase >= 0) {
+      blinkPhase += dt;
+      const p = Math.min(blinkPhase / 0.14, 1);
+      const s = p < .5 ? p * 2 : (1 - p) * 2;
+      lidL.scale.y = lidR.scale.y = 0.06 + s * 0.94;
+      if (p >= 1) { blinkPhase = -1; nextBlink = t + 4 + Math.random() * 3; }
+    }
+  }
+  frames++; fpsT += dt;
+  if (fpsT >= 1) { const el = document.getElementById('fps'); if (el) el.textContent = frames; frames = 0; fpsT = 0; }
+  renderer.render(scene, camera);
+}
+tick();
+</script>
+</body>
+</html>

@@ -1,22 +1,85 @@
 {
-  "name": "app",
+  "name": "zhixingos",
   "version": "1.0.0",
+  "description": "Local-first personal intelligence environment with an executable secretary, evidence-based digital twin and reversible change reasoning.",
+  "license": "MIT",
+  "keywords": [
+    "expo",
+    "react-native",
+    "personal-ai",
+    "digital-twin",
+    "local-first"
+  ],
+  "engines": {
+    "node": ">=22.5"
+  },
+  "overrides": {
+    "metro": "0.84.5",
+    "metro-config": "0.84.5",
+    "metro-transform-worker": "0.84.5",
+    "uuid": "11.1.1"
+  },
   "main": "index.ts",
   "dependencies": {
-    "expo": "~57.0.7",
+    "@pixiv/three-vrm": "^3.5.5",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/slider": "5.2.0",
+    "@react-navigation/bottom-tabs": "^7.4.0",
+    "@react-navigation/native": "^7.1.6",
+    "@react-navigation/native-stack": "^7.3.10",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
+    "expo": "~57.0.16",
+    "expo-asset": "~57.0.14",
+    "expo-audio": "~57.0.4",
+    "expo-build-properties": "~57.0.14",
+    "expo-calendar": "~57.0.2",
+    "expo-file-system": "~57.0.5",
+    "expo-gl": "~57.0.2",
+    "expo-image-picker": "~57.0.13",
+    "expo-secure-store": "~57.0.1",
+    "expo-speech": "~57.0.1",
     "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.2",
+    "moti": "^0.30.0",
     "react": "19.2.3",
-    "react-native": "0.86.0"
+    "react-dom": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-reanimated": "4.5.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "^4.25.0",
+    "react-native-svg": "15.15.4",
+    "react-native-web": "^0.21.2",
+    "react-native-worklets": "0.10.1",
+    "three": "^0.185.1",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "@types/react": "~19.2.2",
+    "@types/three": "^0.185.1",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "^57.0.1",
+    "tsx": "^4.23.12",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "build:web": "expo export --platform web",
+    "build:apk": "powershell -ExecutionPolicy Bypass -File scripts/build-apk.ps1",
+    "backend:phone": "powershell -ExecutionPolicy Bypass -File scripts/start-phone-backend.ps1",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "tsx --test tests/*.test.ts",
+    "test:backend": "npm --prefix backend test",
+    "test:mobile": "playwright test e2e/mobile-functional.spec.ts --project=mobile-chromium --reporter=list",
+    "doctor": "npx expo-doctor",
+    "audit:open-source": "powershell -ExecutionPolicy Bypass -File scripts/open-source-audit.ps1",
+    "check": "npm test && npm run test:backend && npm run typecheck && npm --prefix backend run typecheck && npm run lint"
   },
   "private": true
 }

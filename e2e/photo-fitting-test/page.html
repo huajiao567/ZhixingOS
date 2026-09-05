@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>photo-fitting harness</title></head>
+<body>
+<script type="module">
+  let faceLandmarker, poseLandmarker;
+  try {
+  const CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35';
+  const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+  const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
+
+  const vision = await import(`${CDN}/vision_bundle.mjs`);
+  const fileset = await vision.FilesetResolver.forVisionTasks(`${CDN}/wasm`);
+  faceLandmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath: FACE_MODEL, delegate: 'GPU' },
+    runningMode: 'IMAGE', numFaces: 1,
+  });
+  poseLandmarker = await vision.PoseLandmarker.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath: POSE_MODEL, delegate: 'GPU' },
+    runningMode: 'IMAGE', numPoses: 1,
+  });
+  window.__modelsReady = true;
+  } catch (e) {
+    window.__modelsError = String(e && e.stack || e);
+    console.error('model init failed', e);
+  }
+
+  function loadImage(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('decode failed: ' + url));
+      img.src = url;
+    });
+  }
+
+  // 与 App 相同的健壮策略：压缩到最长边 1024 再检测，避免大图内存与时间开销
+  function downscale(img, max = 1024) {
+    const scale = Math.min(1, max / Math.max(img.width, img.height));
+    if (scale >= 1) return img;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  }
+
+  window.__analyze = async (url) => {
+    try {
+      const img = await loadImage(url);
+      const small = downscale(img);
+      const face = faceLandmarker.detect(small);
+      const pose = poseLandmarker.detect(small);
+      return {
+        url,
+        width: img.width,
+        height: img.height,
+        faceLandmarks: face.faceLandmarks?.[0] ?? null,
+        poseLandmarks: pose.landmarks?.[0] ?? null,
+      };
+    } catch (e) {
+      return { url, error: String(e) };
+    }
+  };
+</script>
+</body>
+</html>

@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>知行镜 · 三维镜像编辑器（设计稿）</title>
+<style>
+  :root{
+    --bg:#0A0E17; --surface:rgba(255,255,255,.04); --surface2:rgba(255,255,255,.06);
+    --border:rgba(255,255,255,.08); --text:#ECEFF5; --muted:#8A93A6;
+    --indigo:#5B6EF5; --cyan:#36D6C3; --amber:#F5B544; --red:#F2606A;
+    --glassblur:18px; --radius:18px;
+  }
+  [data-theme="light"]{
+    --bg:#EEF1F8; --surface:rgba(15,23,42,.035); --surface2:rgba(15,23,42,.06);
+    --border:rgba(15,23,42,.10); --text:#141A2B; --muted:#5B647A;
+    --indigo:#4A5BE8; --cyan:#13A892; --amber:#D99412; --red:#DC3F4A;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 800px at 20% -10%,#1b2540 0%,transparent 55%),
+               radial-gradient(1000px 700px at 110% 20%,#15243a 0%,transparent 50%),
+               #05070D;
+    color:var(--text); min-height:100%; display:flex; align-items:center; justify-content:center;
+    padding:32px 16px; gap:42px; flex-wrap:wrap;
+  }
+  [data-theme="light"] body,body.light-mode{background:#dfe4f0;}
+
+  /* ---- studio side note ---- */
+  .studio-note{max-width:280px; color:#AEB6C8; line-height:1.7; font-size:13px;}
+  .studio-note h1{font-size:22px; color:#fff; margin-bottom:10px; letter-spacing:.5px;}
+  .studio-note .tag{display:inline-block; font-size:11px; padding:3px 9px; border-radius:999px;
+    background:rgba(91,110,245,.16); color:#9aa6ff; border:1px solid rgba(91,110,245,.3); margin-bottom:14px;}
+  .studio-note ul{margin:12px 0 0 16px;}
+  .studio-note li{margin-bottom:7px;}
+  .studio-note .warn{margin-top:16px; padding:10px 12px; border-radius:12px; font-size:12px;
+    background:rgba(242,96,106,.10); border:1px solid rgba(242,96,106,.28); color:#ffb3b9;}
+
+  /* ---- phone ---- */
+  .phone{
+    width:390px; height:844px; border-radius:46px; background:var(--bg);
+    border:1px solid var(--border);
+    box-shadow:0 40px 90px -30px rgba(0,0,0,.75), inset 0 0 0 2px rgba(255,255,255,.03);
+    position:relative; overflow:hidden; flex:none;
+    transition:background .4s ease;
+  }
+  .notch{position:absolute; top:9px; left:50%; transform:translateX(-50%); width:120px; height:30px;
+    background:#000; border-radius:18px; z-index:30; opacity:.92;}
+  .screen{position:absolute; inset:0; display:flex; flex-direction:column;}
+
+  /* status bar 62px */
+  .statusbar{height:62px; flex:none; display:flex; align-items:flex-end; justify-content:space-between;
+    padding:0 26px 8px; font-size:15px; font-weight:600; color:var(--text);}
+  .statusbar .icons{display:flex; align-items:center; gap:6px;}
+  .statusbar svg{display:block;}
+
+  .scroll{flex:1; overflow-y:auto; overflow-x:hidden; padding:6px 18px 28px; scrollbar-width:none;}
+  .scroll::-webkit-scrollbar{display:none;}
+
+  .head{padding:6px 2px 14px;}
+  .head h2{font-size:25px; font-weight:800; letter-spacing:.3px;}
+  .head p{color:var(--muted); margin-top:5px; font-size:13px; line-height:1.55;}
+
+  /* canvas region */
+  .canvas{height:340px; border-radius:24px; overflow:hidden; position:relative;
+    border:1px solid var(--border);
+    background:radial-gradient(120% 90% at 50% 18%, rgba(91,110,245,.18), transparent 60%),
+               radial-gradient(120% 90% at 50% 110%, rgba(54,214,195,.12), transparent 55%),
+               var(--surface);}
+  .canvas svg{width:100%; height:100%; display:block;}
+  .badge{position:absolute; top:12px; left:12px; background:rgba(10,14,22,.78);
+    backdrop-filter:blur(8px); border:1px solid var(--border); border-radius:12px; padding:8px 11px;}
+  .badge .anim{font-weight:700; font-size:13px;}
+  .badge .sub{font-size:11px; color:var(--muted); margin-top:2px;}
+  .theme-toggle{position:absolute; top:12px; right:12px; display:flex; gap:4px;
+    background:rgba(10,14,22,.7); border:1px solid var(--border); border-radius:999px; padding:4px;}
+  .theme-toggle button{width:30px; height:30px; border:none; border-radius:999px; background:transparent;
+    color:var(--muted); cursor:pointer; font-size:13px; display:grid; place-items:center; transition:.25s;}
+  .theme-toggle button.active{background:var(--indigo); color:#fff;}
+
+  /* segmented tabs */
+  .tabs{display:flex; gap:4px; margin:18px 0 14px; background:var(--surface); border:1px solid var(--border);
+    border-radius:14px; padding:4px;}
+  .tabs button{flex:1; border:none; background:transparent; color:var(--muted); font-size:13px; font-weight:600;
+    padding:9px 0; border-radius:10px; cursor:pointer; transition:.28s; font-family:inherit;}
+  .tabs button.active{background:linear-gradient(135deg,var(--indigo),#7a86ff); color:#fff;
+    box-shadow:0 6px 18px -8px var(--indigo);}
+
+  /* section card */
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:14px; margin-bottom:12px; backdrop-filter:blur(var(--glassblur));}
+  .card h3{font-size:15px; font-weight:700; margin-bottom:12px;}
+  .card .hint{font-size:11px; color:var(--muted); line-height:1.55;}
+
+  .metrics{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+  .metric{background:var(--surface2); border:1px solid var(--border); border-radius:13px; padding:11px 10px; text-align:center;}
+  .metric .v{font-size:19px; font-weight:800;}
+  .metric .l{font-size:11px; color:var(--muted); margin-top:3px;}
+  .metric .bar{height:4px; border-radius:2px; background:var(--border); margin-top:8px; overflow:hidden;}
+  .metric .bar i{display:block; height:100%; border-radius:2px; background:linear-gradient(90deg,var(--cyan),var(--indigo));}
+
+  .explain li{list-style:none; color:var(--muted); font-size:13px; line-height:1.7; margin-bottom:7px;}
+  .explain li::before{content:"•"; color:var(--cyan); margin-right:7px;}
+  .cover-note{color:var(--amber); font-size:12px; line-height:1.6; margin-top:6px;}
+
+  .chips{display:flex; flex-wrap:wrap; gap:8px;}
+  .chip{border:1px solid var(--border); background:var(--surface); color:var(--muted);
+    border-radius:999px; padding:8px 13px; font-size:13px; cursor:pointer; transition:.22s; font-family:inherit;}
+  .chip:hover{color:var(--text); border-color:var(--indigo);}
+  .chip:active{transform:scale(.96);}
+  .chip.on{background:var(--indigo); color:#fff; border-color:var(--indigo);}
+
+  /* sliders */
+  .ctrl{margin-bottom:14px;}
+  .ctrl .row{display:flex; justify-content:space-between; font-size:13px; margin-bottom:7px;}
+  .ctrl .row .name{color:var(--text); font-weight:600;}
+  .ctrl .row .val{color:var(--cyan); font-variant-numeric:tabular-nums;}
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:5px; border-radius:3px;
+    background:var(--border); outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:20px; height:20px; border-radius:50%;
+    background:linear-gradient(135deg,#fff,#cfd6ff); border:2px solid var(--indigo); cursor:pointer;
+    box-shadow:0 3px 10px -2px var(--indigo); transition:transform .15s;}
+  input[type=range]::-webkit-slider-thumb:active{transform:scale(1.18);}
+  input[type=range]::-moz-range-thumb{width:18px; height:18px; border-radius:50%; background:#fff;
+    border:2px solid var(--indigo); cursor:pointer;}
+
+  textarea{width:100%; min-height:96px; resize:none; background:var(--surface2); color:var(--text);
+    border:1px solid var(--border); border-radius:12px; padding:11px; font-size:13px; line-height:1.6; font-family:inherit;}
+  textarea:focus{outline:none; border-color:var(--indigo);}
+
+  .swatches{display:flex; gap:10px; margin:6px 0 12px;}
+  .sw{width:34px; height:34px; border-radius:50%; cursor:pointer; border:2px solid transparent; transition:.2s;}
+  .sw.on{border-color:var(--cyan); transform:scale(1.08);}
+
+  .primary{width:100%; border:none; border-radius:14px; padding:14px; font-size:15px; font-weight:800;
+    color:#fff; background:linear-gradient(135deg,var(--indigo),#7a86ff); cursor:pointer; font-family:inherit;
+    box-shadow:0 12px 26px -10px var(--indigo); transition:transform .2s, box-shadow .2s;}
+  .primary:active{transform:scale(.985);}
+  .ghost{border:1px solid var(--red); color:var(--red); background:transparent; width:100%;
+    border-radius:14px; padding:13px; font-weight:700; font-size:14px; cursor:pointer; font-family:inherit; margin-top:4px;}
+
+  pre.json{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px; line-height:1.6;
+    color:#C9D4E4; white-space:pre-wrap; word-break:break-all;}
+
+  .hide{display:none !important;}
+
+  /* floating particles */
+  @keyframes float{0%,100%{transform:translateY(0);opacity:.5}50%{transform:translateY(-14px);opacity:1}}
+  .particle{animation:float 4s ease-in-out infinite;}
+  @keyframes blink{0%,92%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
+  .eyes{animation:blink 6s infinite; transform-box:fill-box; transform-origin:center;}
+</style>
+</head>
+<body data-theme="dark">
+
+  <aside class="studio-note">
+    <span class="tag">设计稿 · 替代 Ardot 画布</span>
+    <h1>三维镜像编辑器</h1>
+    <p>本稿为 Ardot 画布适配器在本环境不可用（NO_ADAPTER）时的<strong>可交互高保真替代交付物</strong>，严格对齐移动端规范：状态栏 62px、单栏垂直堆叠、胶囊分段标签、暗色玻璃拟态。</p>
+    <ul>
+      <li>四个标签：镜像 / 状态 / 捏脸 / 数据</li>
+      <li>「状态」滑块实时驱动参数化 SVG 镜像</li>
+      <li>「捏脸」调节身份参数与配色</li>
+      <li>亮 / 暗 / 系统 主题切换（右上）</li>
+    </ul>
+    <div class="warn">⚠️ 这是可修正的视觉表达，不是心理诊断。证据覆盖度越低，提示越谨慎。</div>
+  </aside>
+
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="screen">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="icons">
+          <svg width="18" height="12" viewBox="0 0 18 12"><g fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="5" y="4.5" width="3" height="7.5" rx="1"/><rect x="10" y="2" width="3" height="10" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1" opacity=".4"/></g></svg>
+          <svg width="16" height="12" viewBox="0 0 16 12"><path fill="currentColor" d="M8 2.2c2 0 3.9.8 5.3 2.1l1.1-1.2A9.6 9.6 0 0 0 8 .4 9.6 9.6 0 0 0 1.6 3.1L2.7 4.3A7.6 7.6 0 0 1 8 2.2Zm0 3.1c1.2 0 2.3.5 3.1 1.3l1.1-1.2A6.5 6.5 0 0 0 8 3.5a6.5 6.5 0 0 0-4.2 1.9l1.1 1.2A4.6 4.6 0 0 1 8 5.3Zm0 3.1c.6 0 1.1.2 1.5.6L8 11 6.5 9.1c.4-.4.9-.6 1.5-.6Z"/></svg>
+          <svg width="26" height="12" viewBox="0 0 26 12"><rect x="1" y="1.5" width="21" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="3" y="3.5" width="16" height="5" rx="1" fill="currentColor"/><rect x="23" y="4" width="2" height="4" rx="1" fill="currentColor"/></svg>
+        </span>
+      </div>
+
+      <div class="scroll" id="scroll">
+        <div class="head">
+          <h2>我的三维镜像</h2>
+          <p>同一个身份，依据身体、日记和行动证据表达今天的状态。</p>
+        </div>
+
+        <div class="canvas">
+          <svg viewBox="0 0 300 340" id="avatarSvg" aria-label="参数化三维镜像">
+            <defs>
+              <radialGradient id="auraGrad" cx="50%" cy="42%" r="55%">
+                <stop offset="0%" id="auraStop0" stop-color="#5B6EF5" stop-opacity=".9"/>
+                <stop offset="100%" stop-color="#5B6EF5" stop-opacity="0"/>
+              </radialGradient>
+              <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="6"/>
+              </filter>
+            </defs>
+            <circle id="aura" cx="150" cy="150" r="120" fill="url(#auraGrad)" filter="url(#soft)"/>
+            <g id="particles"></g>
+            <g id="avatarRoot" style="transform-box:view-box; transform-origin:150px 320px; transition:transform .55s cubic-bezier(.16,1,.3,1);">
+              <!-- body -->
+              <path id="body" d="M95 320 Q95 232 150 222 Q205 232 205 320 Z" fill="#536BE8"/>
+              <!-- neck -->
+              <rect x="140" y="200" width="20" height="28" rx="9" fill="#E8B68F"/>
+              <!-- head -->
+              <g id="head" style="transition:transform .4s ease;">
+                <ellipse id="face" cx="150" cy="160" rx="46" ry="54" fill="#F0B98E"/>
+                <path id="hair" d="M104 158 Q104 104 150 104 Q196 104 196 158 Q176 134 150 134 Q124 134 104 158 Z" fill="#14161B"/>
+                <g class="eyes" id="eyes">
+                  <ellipse id="eyeL" cx="132" cy="158" rx="6" ry="7" fill="#2a2320"/>
+                  <ellipse id="eyeR" cx="168" cy="158" rx="6" ry="7" fill="#2a2320"/>
+                </g>
+                <path id="browL" d="M123 146 Q132 142 141 146" stroke="#3a2a22" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+                <path id="browR" d="M159 146 Q168 142 177 146" stroke="#3a2a22" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+                <ellipse cx="138" cy="172" rx="4" ry="2.4" fill="#e79a86" opacity=".6"/>
+                <ellipse cx="162" cy="172" rx="4" ry="2.4" fill="#e79a86" opacity=".6"/>
+                <path id="mouth" d="M132 184 Q150 196 168 184" stroke="#a8553f" stroke-width="3" fill="none" stroke-linecap="round"/>
+              </g>
+            </g>
+          </svg>
+          <div class="badge">
+            <div class="anim" id="badgeAnim">日常</div>
+            <div class="sub" id="badgeSub">静蓝 · 短发</div>
+          </div>
+          <div class="theme-toggle" id="themeToggle">
+            <button data-t="dark" class="active" title="暗">🌙</button>
+            <button data-t="light" title="亮">☀️</button>
+            <button data-t="system" title="系统">🖥️</button>
+          </div>
+        </div>
+
+        <div class="tabs" id="tabs">
+          <button data-tab="mirror" class="active">镜像</button>
+          <button data-tab="state">状态</button>
+          <button data-tab="identity">捏脸</button>
+          <button data-tab="data">数据</button>
+        </div>
+
+        <!-- MIRROR -->
+        <section data-panel="mirror">
+          <div class="card">
+            <h3>今日状态证据</h3>
+            <div class="metrics" id="metricGrid"></div>
+          </div>
+          <div class="card">
+            <h3>镜像为什么这样呈现</h3>
+            <ul class="explain" id="explain"></ul>
+            <div class="cover-note" id="coverNote"></div>
+          </div>
+          <div class="card">
+            <h3>这像今天的你吗？</h3>
+            <div class="chips" id="feedbackChips">
+              <div class="chip" data-fb="accurate">基本准确</div>
+              <div class="chip" data-fb="tooTired">显得太疲惫</div>
+              <div class="chip" data-fb="tooHappy">显得太开心</div>
+              <div class="chip" data-fb="tooSlouched">姿态太低沉</div>
+            </div>
+            <p class="hint" id="calibHint" style="margin-top:10px;"></p>
+          </div>
+          <div class="card">
+            <h3>快速场景演示</h3>
+            <div class="chips" id="scenarioChips">
+              <div class="chip" data-sc="focused">深度专注</div>
+              <div class="chip" data-sc="active">运动活跃</div>
+              <div class="chip" data-sc="recovery">需要恢复</div>
+              <div class="chip" data-sc="balanced">平衡日常</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- STATE -->
+        <section data-panel="state" class="hide">
+          <div class="card">
+            <h3>手环与日程模拟输入</h3>
+            <div id="signalCtrls"></div>
+          </div>
+          <div class="card">
+            <h3>今日一句话记录</h3>
+            <textarea id="diary" placeholder="例如：今天虽然累，但完成了一件真正重要的事。"></textarea>
+          </div>
+          <button class="primary" id="regen">重新生成今日镜像</button>
+        </section>
+
+        <!-- IDENTITY -->
+        <section data-panel="identity" class="hide">
+          <div class="card">
+            <h3>脸部与体型</h3>
+            <div id="identityCtrls"></div>
+          </div>
+          <div class="card">
+            <h3>发型与颜色</h3>
+            <p class="hint">发型</p>
+            <div class="chips" id="hairChips" style="margin:8px 0 4px;">
+              <div class="chip" data-hair="short">短发</div>
+              <div class="chip" data-hair="round">圆润</div>
+              <div class="chip" data-hair="side">侧分</div>
+            </div>
+            <p class="hint" style="margin-top:10px;">肤色</p>
+            <div class="swatches" id="skinSw"></div>
+            <p class="hint">发色</p>
+            <div class="swatches" id="hairSw"></div>
+            <p class="hint">基础服装色</p>
+            <div class="swatches" id="shirtSw"></div>
+            <p class="hint" style="margin-top:12px;">当前 Demo 用参数化几何体在手机内直接生成。后续接入 MediaPipe 时，只需把照片特征映射到同一组 Identity 参数。</p>
+          </div>
+        </section>
+
+        <!-- DATA -->
+        <section data-panel="data" class="hide">
+          <div class="card">
+            <h3>给本地 Agent 的实时状态对象</h3>
+            <pre class="json" id="jsonOut"></pre>
+          </div>
+          <button class="ghost" id="reset">恢复默认 Demo</button>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+<script>
+const $ = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const clamp01 = v=>Math.max(0,Math.min(1,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+const skinTones=['#F8D1B0','#F0B98E','#D9996C','#B87551','#8D563E'];
+const hairColors=['#14161B','#3B2A23','#6C4932','#8B735A'];
+const shirtColors=[{c:'#536BE8',n:'静蓝'},{c:'#34A27B',n:'青碧'},{c:'#A768B8',n:'紫藤'},{c:'#C77B43',n:'暖橙'}];
+
+const defaultSignals={sleepHours:7,sleepQuality:.6,hrvRelative:1,steps:6000,workoutMinutes:20,
+  focusMinutes:90,taskCompletion:.5,projectMomentum:.5,scheduleLoad:.5,diary:''};
+const defaultIdentity={faceWidth:1,faceHeight:1,eyeSize:1,eyeSpacing:1,noseSize:1,mouthWidth:1,
+  bodyScale:1,shoulderWidth:1,hairStyle:'short',skinTone:'#F0B98E',hairColor:'#14161B',shirtColor:'#536BE8'};
+const defaultCalib={fatigue:0,smile:0,posture:0};
+
+let signals={...defaultSignals};
+let identity={...defaultIdentity};
+let calib={...defaultCalib};
+let offsets={energy:0,mood:0,posture:0}; // feedback nudges
+
+const signalDefs=[
+  {k:'sleepHours',name:'睡眠时长',min:3,max:10,step:.1,f:v=>v.toFixed(1)+' h'},
+  {k:'sleepQuality',name:'睡眠质量',min:0,max:1,step:.01,f:v=>Math.round(v*100)+'%'},
+  {k:'hrvRelative',name:'相对HRV',min:.5,max:1.5,step:.01,f:v=>v.toFixed(2)},
+  {k:'steps',name:'步数',min:0,max:20000,step:100,f:v=>Math.round(v)},
+  {k:'workoutMinutes',name:'运动分钟',min:0,max:120,step:1,f:v=>Math.round(v)+' min'},
+  {k:'focusMinutes',name:'深度专注',min:0,max:300,step:5,f:v=>Math.round(v)+' min'},
+  {k:'taskCompletion',name:'任务完成度',min:0,max:1,step:.01,f:v=>Math.round(v*100)+'%'},
+  {k:'projectMomentum',name:'项目推进度',min:0,max:1,step:.01,f:v=>Math.round(v*100)+'%'},
+  {k:'scheduleLoad',name:'日程负荷',min:0,max:1,step:.01,f:v=>Math.round(v*100)+'%'},
+];
+const identityDefs=[
+  {k:'faceWidth',name:'脸宽',min:.7,max:1.3,step:.01,f:v=>v.toFixed(2)},
+  {k:'faceHeight',name:'脸长',min:.7,max:1.3,step:.01,f:v=>v.toFixed(2)},
+  {k:'eyeSize',name:'眼睛大小',min:.7,max:1.3,step:.01,f:v=>v.toFixed(2)},
+  {k:'eyeSpacing',name:'眼距',min:.7,max:1.3,step:.01,f:v=>v.toFixed(2)},
+  {k:'noseSize',name:'鼻子大小',min:.7,max:1.3,step:.01,f:v=>v.toFixed(2)},
+  {k:'mouthWidth',name:'嘴宽',min:.7,max:1.3,step:.01,f:v=>v.toFixed(2)},
+  {k:'bodyScale',name:'身体比例',min:.7,max:1.3,step:.01,f:v=>v.toFixed(2)},
+  {k:'shoulderWidth',name:'肩宽',min:.7,max:1.3,step:.01,f:v=>v.toFixed(2)},
+];
+
+// crude diary sentiment (zh)
+function diarySentiment(t){
+  const pos=/完成|重要|开心|顺利|进步|喜欢|感恩|平静|充实|治愈/.test(t);
+  const neg=/累|疲惫|焦虑|压力|难过|挫败|拖延|空虚|烦躁|失眠/.test(t);
+  if(pos&&!neg)return .35; if(neg&&!pos)return -.35; if(pos&&neg)return 0; return 0;
+}
+
+function infer(){
+  const s=signals;
+  const energy=clamp01((s.sleepHours/8)*.4 + s.sleepQuality*.3 + (s.hrvRelative/1.5)*.3);
+  const sent=diarySentiment(s.diary||'');
+  const mood=clamp01(.5 + sent*.5 + (s.taskCompletion-.5)*.2 + (s.projectMomentum-.5)*.15);
+  const stress=clamp01(s.scheduleLoad*.5 + (1-s.hrvRelative/1.5)*.3 + (1-energy)*.2);
+  const focus=clamp01((s.focusMinutes/180)*.6 + s.taskCompletion*.4);
+  const phys=clamp01((s.steps/10000)*.5 + (s.workoutMinutes/60)*.5);
+  const mean=clamp01(s.taskCompletion*.4 + s.projectMomentum*.6);
+  // evidence coverage over 7 sources
+  const diaryHas=((s.diary||'').trim().length>0)?1:0;
+  const src=[s.sleepHours>0,s.sleepQuality>0,s.hrvRelative>0,s.steps>0,s.workoutMinutes>0,s.focusMinutes>0,s.taskCompletion>0,diaryHas]
+    .filter(Boolean).length;
+  const cov=clamp01((src-1)/6);
+  let st={energy,mood,stress,focus,physicality:phys,meaningMomentum:mean,evidenceCoverage:cov};
+  // apply feedback offsets
+  st.energy=clamp01(st.energy+offsets.energy);
+  st.mood=clamp01(st.mood+offsets.mood);
+  st.posture=clamp01((energy*0.7+ (1-stress)*0.3)+offsets.posture);
+  return st;
+}
+
+function shirtName(c){return (shirtColors.find(x=>x.c===c)||shirtColors[0]).n;}
+
+function deriveScene(st){
+  if(st.energy<0.35)return '恢复';
+  if(st.focus>0.6)return '专注';
+  if(st.physicality>0.6)return '活跃';
+  if(Math.abs(st.mood-0.5)<0.2 && st.stress<0.4)return '平衡';
+  return '日常';
+}
+
+function renderAvatar(st){
+  const a=$('#avatarRoot');
+  const slouch=(1-st.posture)*9;
+  const dy=(1-st.posture)*16;
+  a.style.transform=`rotate(${slouch}deg) translateY(${dy}px)`;
+  // aura
+  const calm=st.mood*(1-st.stress);
+  const hue=lerp(18,198,calm);
+  const sat=70+st.stress*20;
+  const light=52+st.energy*6;
+  const col=`hsl(${hue} ${sat}% ${light}%)`;
+  $('#auraStop0').setAttribute('stop-color',col);
+  $('#aura').style.opacity=(0.25+st.energy*0.5).toFixed(2);
+  // eyes
+  const er=4+st.energy*4;
+  $('#eyeL').setAttribute('ry',er); $('#eyeR').setAttribute('ry',er);
+  // mouth
+  const curve=(st.mood-0.5)*30;
+  const mw=identity.mouthWidth;
+  const x1=150-18*mw, x2=150+18*mw;
+  $('#mouth').setAttribute('d',`M${x1} 184 Q150 ${184-curve} ${x2} 184`);
+  // identity geometry
+  applyIdentity();
+  // badge
+  $('#badgeAnim').textContent=deriveScene(st);
+  $('#badgeSub').textContent=`${shirtName(identity.shirtColor)} · ${ {short:'短发',round:'圆润',side:'侧分'}[identity.hairStyle] }`;
+}
+
+function applyIdentity(){
+  const i=identity;
+  $('#face').setAttribute('rx',46*i.faceWidth);
+  $('#face').setAttribute('ry',54*i.faceHeight);
+  const ex=132, exr=18*i.eyeSpacing;
+  $('#eyeL').setAttribute('cx',ex-exr); $('#eyeR').setAttribute('cx',ex+exr);
+  const es=1*i.eyeSize;
+  $('#eyeL').setAttribute('rx',6*es); $('#eyeR').setAttribute('rx',6*es);
+  $('#browL').setAttribute('d',`M${ex-exr-9} 146 Q${ex-exr} 142 ${ex-exr+9} 146`);
+  $('#browR').setAttribute('d',`M${ex+exr-9} 146 Q${ex+exr} 142 ${ex+exr+9} 146`);
+  $('#face').setAttribute('fill',i.skinTone);
+  $('#hair').setAttribute('fill',i.hairColor);
+  const bs=1*i.bodyScale, sw=1*i.shoulderWidth;
+  $('#body').setAttribute('d',`M${150-55*sw} 320 Q${150-55*sw} ${232*bs} 150 222 Q${150+55*sw} ${232*bs} ${150+55*sw} 320 Z`);
+  $('#body').setAttribute('fill',i.shirtColor);
+  // hair style path
+  const hw=46*i.faceWidth;
+  let hp;
+  if(i.hairStyle==='short') hp=`M${150-hw} 158 Q${150-hw} 104 150 104 Q${150+hw} 104 ${150+hw} 158 Q${150+hw-20} 134 150 134 Q${150-hw+20} 134 ${150-hw} 158 Z`;
+  else if(i.hairStyle==='round') hp=`M${150-hw} 162 Q${150-hw} 96 150 96 Q${150+hw} 96 ${150+hw} 162 Q${150+hw} 150 150 150 Q${150-hw} 150 ${150-hw} 162 Z`;
+  else hp=`M${150-hw} 158 Q${150-hw} 104 150 104 Q${150+hw} 104 ${150+hw} 158 L${150+hw} 140 Q${150+18} 120 150 150 Q${150-hw+20} 134 ${150-hw} 158 Z`;
+  $('#hair').setAttribute('d',hp);
+}
+
+function renderMetrics(st){
+  const grid=$('#metricGrid'); grid.innerHTML='';
+  const items=[['精力',st.energy],['情绪',st.mood],['压力',st.stress],['专注',st.focus],['运动',st.physicality],['意义推进',st.meaningMomentum]];
+  items.forEach(([l,v])=>{
+    const el=document.createElement('div'); el.className='metric';
+    el.innerHTML=`<div class="v">${Math.round(v*100)}</div><div class="l">${l}</div><div class="bar"><i style="width:${Math.round(v*100)}%"></i></div>`;
+    grid.appendChild(el);
+  });
+}
+function renderExplain(st){
+  const ul=$('#explain'); ul.innerHTML='';
+  const lines=[
+    `今日精力 ${Math.round(st.energy*100)}%，镜像姿态${st.posture>0.6?'挺拔':'略显松弛'}。`,
+    `情绪 ${Math.round(st.mood*100)}%，${st.mood>0.6?'嘴角自然上扬':st.mood<0.4?'略带低落':'平稳中性'}。`,
+    `压力 ${Math.round(st.stress*100)}%，光晕${st.stress>0.6?'偏暖示警':'保持冷静青蓝'}。`,
+  ];
+  lines.forEach(t=>{const li=document.createElement('li');li.textContent=t;ul.appendChild(li);});
+  $('#coverNote').textContent=`证据覆盖度 ${Math.round(st.evidenceCoverage*100)}%；这是可修正的视觉表达，不是心理诊断。`;
+  $('#calibHint').textContent=`校正偏差：疲惫 ${calib.fatigue.toFixed(2)} / 微笑 ${calib.smile.toFixed(2)} / 姿态 ${calib.posture.toFixed(2)}`;
+}
+
+function renderJSON(){
+  $('#jsonOut').textContent=JSON.stringify({identity,signals,calibration:calib,snapshot:{state:infer()}},null,2);
+}
+
+function update(){
+  const st=infer();
+  renderAvatar(st);
+  if($('[data-panel="mirror"]').classList.contains('hide')===false){renderMetrics(st);renderExplain(st);}
+  renderJSON();
+}
+
+/* build controls */
+function buildCtrls(){
+  const sc=$('#signalCtrls');
+  signalDefs.forEach(d=>{
+    const wrap=document.createElement('div'); wrap.className='ctrl';
+    wrap.innerHTML=`<div class="row"><span class="name">${d.name}</span><span class="val" id="sv_${d.k}"></span></div>
+      <input type="range" min="${d.min}" max="${d.max}" step="${d.step}" value="${signals[d.k]}" id="sr_${d.k}">`;
+    sc.appendChild(wrap);
+    const inp=wrap.querySelector('input');
+    const out=wrap.querySelector('.val');
+    out.textContent=d.f(signals[d.k]);
+    inp.addEventListener('input',e=>{signals[d.k]=parseFloat(e.target.value);out.textContent=d.f(signals[d.k]);update();});
+  });
+  const ic=$('#identityCtrls');
+  identityDefs.forEach(d=>{
+    const wrap=document.createElement('div'); wrap.className='ctrl';
+    wrap.innerHTML=`<div class="row"><span class="name">${d.name}</span><span class="val" id="iv_${d.k}"></span></div>
+      <input type="range" min="${d.min}" max="${d.max}" step="${d.step}" value="${identity[d.k]}" id="ir_${d.k}">`;
+    ic.appendChild(wrap);
+    const inp=wrap.querySelector('input');
+    const out=wrap.querySelector('.val');
+    out.textContent=d.f(identity[d.k]);
+    inp.addEventListener('input',e=>{identity[d.k]=parseFloat(e.target.value);out.textContent=d.f(identity[d.k]);update();});
+  });
+  // swatches
+  const mk=(arr,key,sel)=>arr.forEach(c=>{
+    const d=document.createElement('div'); d.className='sw'+(c===identity[key]?' on':''); d.style.background=c;
+    d.onclick=()=>{identity[key]=c;$$('.sw',sel).forEach(x=>x.classList.remove('on'));d.classList.add('on');update();};
+    sel.appendChild(d);
+  });
+  mk(skinTones,'skinTone',$('#skinSw'));
+  mk(hairColors,'hairColor',$('#hairSw'));
+  mk(shirtColors.map(x=>x.c),'shirtColor',$('#shirtSw'));
+}
+
+/* tabs */
+$$('#tabs button').forEach(b=>b.onclick=()=>{
+  $$('#tabs button').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+  const t=b.dataset.tab;
+  $$('[data-panel]').forEach(p=>p.classList.toggle('hide',p.dataset.panel!==t));
+  update();
+});
+
+/* feedback */
+const fbMap={accurate:[0,0,0],tooTired:[-0.25,0,0],tooHappy:[0,0.3,0],tooSlouched:[0,0,-0.3]};
+$$('#feedbackChips .chip').forEach(c=>c.onclick=()=>{
+  $$('#feedbackChips .chip').forEach(x=>x.classList.remove('on')); c.classList.add('on');
+  const [e,m,p]=fbMap[c.dataset.fb];
+  offsets.energy=e; offsets.mood=m; offsets.posture=p;
+  if(c.dataset.fb==='tooTired')calib.fatigue+=0.1;
+  if(c.dataset.fb==='tooHappy')calib.smile+=0.1;
+  if(c.dataset.fb==='tooSlouched')calib.posture+=0.1;
+  update();
+});
+
+/* scenarios */
+const scen={
+  focused:{focusMinutes:240,taskCompletion:.85,projectMomentum:.8,sleepHours:7,scheduleLoad:.6,steps:3000,workoutMinutes:10,diary:'深度推进了关键项目，心流状态。'},
+  active:{steps:14000,workoutMinutes:70,sleepHours:7.5,sleepQuality:.8,hrvRelative:1.2,focusMinutes:60,taskCompletion:.5,diary:'跑了个长跑，身体很爽。'},
+  recovery:{sleepHours:5.5,sleepQuality:.4,hrvRelative:.7,steps:1500,workoutMinutes:0,focusMinutes:20,taskCompletion:.2,scheduleLoad:.8,diary:'今天很累，几乎没动力。'},
+  balanced:{sleepHours:7.5,sleepQuality:.7,hrvRelative:1,steps:7000,workoutMinutes:30,focusMinutes:120,taskCompletion:.6,projectMomentum:.55,scheduleLoad:.45,diary:'平稳的一天，有进有退。'},
+};
+$$('#scenarioChips .chip').forEach(c=>c.onclick=()=>{
+  $$('#scenarioChips .chip').forEach(x=>x.classList.remove('on')); c.classList.add('on');
+  signals={...defaultSignals,...scen[c.dataset.sc]};
+  syncSignalInputs(); update();
+});
+function syncSignalInputs(){
+  signalDefs.forEach(d=>{const inp=$('#sr_'+d.k); if(inp){inp.value=signals[d.k];$('#sv_'+d.k).textContent=d.f(signals[d.k]);}});
+  $('#diary').value=signals.diary||'';
+}
+
+/* regen */
+$('#regen').onclick=()=>{signals.diary=$('#diary').value;update();
+  $$('#tabs button').forEach(x=>x.classList.remove('active'));
+  $('[data-tab="mirror"]').classList.add('active');
+  $$('[data-panel]').forEach(p=>p.classList.toggle('hide',p.dataset.panel!=='mirror'));
+  $('#scroll').scrollTop=0;};
+
+/* reset */
+$('#reset').onclick=()=>{signals={...defaultSignals};identity={...defaultIdentity};calib={...defaultCalib};offsets={energy:0,mood:0,posture:0};
+  $$('.chip.on').forEach(x=>x.classList.remove('on'));
+  $('#signalCtrls').innerHTML=''; $('#identityCtrls').innerHTML='';
+  $('#skinSw').innerHTML=''; $('#hairSw').innerHTML=''; $('#shirtSw').innerHTML='';
+  buildCtrls(); applyIdentity(); update();};
+
+/* hair chips */
+$$('#hairChips .chip').forEach(c=>{if(c.dataset.hair===identity.hairStyle)c.classList.add('on');
+  c.onclick=()=>{$$('#hairChips .chip').forEach(x=>x.classList.remove('on'));c.classList.add('on');identity.hairStyle=c.dataset.hair;update();};});
+
+/* theme */
+const mq=window.matchMedia('(prefers-color-scheme: light)');
+function applyTheme(t){
+  if(t==='system'){document.body.setAttribute('data-theme',mq.matches?'light':'dark');}
+  else document.body.setAttribute('data-theme',t);
+  $$('#themeToggle button').forEach(b=>b.classList.toggle('active',b.dataset.t===t));
+}
+$$('#themeToggle button').forEach(b=>b.onclick=()=>applyTheme(b.dataset.t));
+mq.addEventListener?.('change',()=>{if($$('#themeToggle button.active')[0]?.dataset.t==='system')applyTheme('system');});
+
+/* particles */
+(function(){const g=$('#particles');for(let i=0;i<7;i++){const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  c.setAttribute('cx',60+Math.random()*180);c.setAttribute('cy',80+Math.random()*180);c.setAttribute('r',1.5+Math.random()*2);
+  c.setAttribute('fill','#9aa6ff');c.setAttribute('class','particle');c.style.animationDelay=(Math.random()*4)+'s';c.style.opacity=.5;
+  g.appendChild(c);}})();
+
+/* init */
+buildCtrls();
+$('#diary').addEventListener('input',e=>{signals.diary=e.target.value;update();});
+applyIdentity(); update();
+</script>
+</body>
+</html>

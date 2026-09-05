@@ -2,12 +2,15 @@
 
 # dependencies
 node_modules/
+coverage/
 
 # Expo
 .expo/
 dist/
 web-build/
 expo-env.d.ts
+/dist-android-bundle/
+/backend/dist/
 
 # Native
 .kotlin/
@@ -25,13 +28,28 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+test-results/
+*.log
+/e2e/html-report/
+/e2e/mobile-screenshots/
+/e2e/screens/
+/e2e/*.png
+/e2e/test-results.json
+/backend/tests/e2e/*-report.json
+/ui-screenshots/
+# local biometric QA artifacts derived from real photos; never publish
+/e2e/photo-fitting-test/landmarks.json
+/e2e/photo-fitting-test/report.json
 
 # macOS
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# local env files and secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
 
 # typescript
 *.tsbuildinfo
@@ -39,3 +57,35 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+# Local Expo modules keep their source, but not Gradle's generated outputs.
+/modules/*/android/build/
+/modules/*/android/.gradle/
+/.toolchains/
+/artifacts/
+*.apk
+*.aab
+*.keystore
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+/data/
+/backend/data/
+
+# agent/editor-local state and private planning sources
+/.zcode/
+/.claude/
+/.trae/
+/.workbuddy/
+/开发文档/
+/goon.md
+
+# unused local avatar experiments and duplicate archives (runtime assets below stay included)
+/assets/avatar/
+/public/assets/avatar/
+/public/avatar/AvatarSample_G.vrm
+/public/avatar/Barbarian.glb
+/public/avatar/Knight.glb
+/public/avatar/Rogue.glb
+/public/avatar/Rogue_Hooded.glb

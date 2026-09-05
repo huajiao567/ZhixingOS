@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知镜行 Satori · 镜像主界面 V4.7 设计定型</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   知镜行 Satori — Quiet Spatial UI · 设计令牌（V4.7 定型）
+   原则：一个视觉中心 · 充分留白 · 单一品牌强调色 · 极少边框 · 渐进展开
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  /* —— 深色基准（经典靛青 · 与代码 classic-dark 一致）—— */
+  --bg:#0E1116;            /* 页面底：深墨蓝，非纯黑 */
+  --bg-raise:#141922;      /* 舞台微抬升 */
+  --surface:#171C24;       /* 一级表面 */
+  --surface-alt:#1F2630;   /* 二级表面 */
+  --surface-soft:#242C38;  /* 三级表面 */
+  --border:#2C3542;        /* 边框（克制使用） */
+  --border-soft:#232B36;
+  --text-1:#EDF1F6;        /* 主文本：暖白，非纯白 */
+  --text-2:#A9B3C0;        /* 次文本 */
+  --text-3:#828D9A;        /* 弱文本 */
+  --accent:#5B7CFF;        /* 唯一品牌强调色：靛 */
+  --accent-soft:rgba(91,124,255,.14);
+  --accent-muted:#8FA3FF;
+  --mirror-emotion:#9B7BE0;    /* 情绪镜：堇 */
+  --mirror-emotion-soft:rgba(155,123,224,.14);
+  --mirror-health:#4DB6AC;     /* 健康镜：青 */
+  --mirror-health-soft:rgba(77,182,172,.14);
+  --mirror-plan:#E8A13D;       /* 规划镜：桂 */
+  --mirror-plan-soft:rgba(232,161,61,.14);
+  --ok:#3FB27F; --warn:#E8A13D; --err:#E15B5B;
+  --glass-bg:rgba(23,28,36,.62);       /* 感知流玻璃底 */
+  --glass-border:rgba(237,241,246,.08);
+  /* —— 圆角 —— */
+  --r-pill:999px; --r-sheet:24px; --r-pillcard:14px; --r-chip:10px;
+  /* —— 动效（因果动效 150–400ms，吸入 900ms）—— */
+  --t-fast:150ms; --t-normal:250ms; --t-slow:400ms; --t-inhale:900ms;
+  --ease-out:cubic-bezier(.22,1,.36,1);      /* ease-out-quart */
+  --ease-inout:cubic-bezier(.65,0,.35,1);
+  /* —— 字号阶梯（1.125 模块化比例）—— */
+  --fs-hero:28px; --fs-title:22px; --fs-section:18px; --fs-body:16px;
+  --fs-status:17px;  /* 指数状态词专用 */
+  --fs-small:14px; --fs-tiny:12px; --fs-micro:10px;
+  /* —— 间距 4 基点 —— */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-8:32px;
+}
+[data-theme="light"]{
+  --bg:#F5F6F8; --bg-raise:#FFFFFF;
+  --surface:#FFFFFF; --surface-alt:#F0F2F7; --surface-soft:#E8EBF2;
+  --border:#D8DDE6; --border-soft:#E2E6EE;
+  --text-1:#14181F; --text-2:#5B647A; --text-3:#7A8496;
+  --accent:#4A5BE8; --accent-soft:rgba(74,91,232,.10); --accent-muted:#6B7DFF;
+  --mirror-emotion:#7755B8; --mirror-emotion-soft:rgba(119,85,184,.10);
+  --mirror-health:#2E9488; --mirror-health-soft:rgba(46,148,136,.10);
+  --mirror-plan:#C77F1F; --mirror-plan-soft:rgba(199,127,31,.10);
+  --ok:#2E8E5C; --err:#C8453F;
+  --glass-bg:rgba(255,255,255,.68);
+  --glass-border:rgba(20,24,31,.06);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  background:#0A0C10;
+  font-family:"MiSans","PingFang SC","HarmonyOS Sans SC","Source Han Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  color:#EDF1F6; overflow-x:hidden;
+  font-feature-settings:"tnum" 1;
+}
+button{font-family:inherit;border:none;background:none;cursor:pointer;color:inherit}
+/* ══════════ 页面骨架 ══════════ */
+.workbench{max-width:1440px;margin:0 auto;padding:28px 32px 64px}
+.wb-head{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:26px}
+.wb-title h1{font-size:24px;font-weight:700;letter-spacing:.02em}
+.wb-title p{font-size:13px;color:#8A93A3;margin-top:6px}
+.wb-title p b{color:#C7CEDA;font-weight:600}
+.wb-controls{display:flex;gap:10px;flex-wrap:wrap}
+.ctl-btn{
+  padding:9px 16px;border-radius:var(--r-pill);font-size:13px;font-weight:600;
+  background:#171C24;border:1px solid #2A3240;color:#C7CEDA;
+  transition:all var(--t-fast) var(--ease-out);
+}
+.ctl-btn:hover{border-color:#3D4757;transform:translateY(-1px)}
+.ctl-btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.wb-grid{display:grid;grid-template-columns:300px minmax(430px,1fr) 320px;gap:28px;align-items:start}
+@media(max-width:1180px){.wb-grid{grid-template-columns:1fr}.side-l{order:2}.side-r{order:3}}
+/* ══════════ 手机画布 ══════════ */
+.stage-wrap{display:flex;justify-content:center}
+.phone{
+  position:relative;width:390px;height:844px;border-radius:52px;
+  background:var(--bg);color:var(--text-1);
+  box-shadow:0 0 0 11px #1B1F26,0 0 0 13px #33394a,0 40px 90px rgba(0,0,0,.55);
+  overflow:hidden;flex:none;
+  transition:background var(--t-normal) var(--ease-out),color var(--t-normal) var(--ease-out);
+}
+.phone::before{/* 灵动岛 */
+  content:"";position:absolute;top:12px;left:50%;transform:translateX(-50%);
+  width:112px;height:30px;border-radius:16px;background:#05070A;z-index:60;
+}
+/* —— 状态栏 —— */
+.statusbar{
+  position:absolute;top:0;left:0;right:0;height:54px;z-index:55;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 28px 0;font-size:14px;font-weight:600;pointer-events:none;
+}
+.statusbar .sb-icons{display:flex;gap:6px;align-items:center;opacity:.85}
+/* —— 顶部感知流（玻璃拟态 · 定型参数）—— */
+.perception{
+  position:absolute;top:54px;left:14px;right:14px;z-index:50;
+  border-radius:18px;
+  background:var(--glass-bg);
+  border:1px solid var(--glass-border);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  padding:10px 14px;
+  display:flex;flex-direction:column;gap:6px;
+  transition:all var(--t-normal) var(--ease-out);
+}
+.perception .p-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.perception .p-date{font-size:var(--fs-tiny);color:var(--text-3);font-weight:500;letter-spacing:.02em}
+.perception .p-item{
+  display:flex;align-items:center;gap:8px;min-width:0;flex:1;
+}
+.perception .p-dot{width:6px;height:6px;border-radius:3px;background:var(--accent);flex:none}
+.perception .p-text{
+  font-size:var(--fs-small);font-weight:500;color:var(--text-1);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.perception .p-why{
+  font-size:11px;color:var(--text-3);padding:3px 8px;border-radius:var(--r-pill);
+  border:1px solid var(--glass-border);flex:none;
+  transition:all var(--t-fast) var(--ease-out);
+}
+.perception .p-why:hover{color:var(--text-2);border-color:var(--border)}
+.perception.empty{flex-direction:row;align-items:center;justify-content:space-between;padding:10px 16px}
+.perception.empty .p-greet{font-size:var(--fs-small);color:var(--text-3)}
+/* —— 中央舞台（落地镜台 · V4.7 定型：去除圆形相框）—— */
+.mirror-stage{
+  position:absolute;left:0;top:118px;bottom:150px;width:262px;
+  display:flex;align-items:flex-end;justify-content:center;
+}
+.stage-glow{ /* 静态环境光晕：不脉冲 */
+  position:absolute;bottom:40px;left:50%;transform:translateX(-50%);
+  width:240px;height:240px;border-radius:50%;
+  background:radial-gradient(circle,var(--accent-soft) 0%,transparent 68%);
+  pointer-events:none;
+}
+.ground-shadow{ /* 地面接触阴影：人物"站"在空间里 */
+  position:absolute;bottom:34px;left:50%;transform:translateX(-50%);
+  width:150px;height:22px;border-radius:50%;
+  background:radial-gradient(ellipse,rgba(0,0,0,.5) 0%,transparent 70%);
+  filter:blur(4px);
+}
+[data-theme="light"] .ground-shadow{background:radial-gradient(ellipse,rgba(20,24,31,.18) 0%,transparent 70%)}
+.twin{position:relative;z-index:2;transform-origin:50% 100%}
+.twin-breathe{animation:breathe 4.8s var(--ease-inout) infinite;transform-origin:50% 100%}
+@keyframes breathe{0%,100%{transform:scale(1,1)}50%{transform:scale(1.006,1.014)}}
+.twin-eyes{animation:blink 6.2s infinite}
+@keyframes blink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.06)}}
+.stage-caption{
+  position:absolute;bottom:6px;left:50%;transform:translateX(-50%);
+  font-size:11px;color:var(--text-3);letter-spacing:.06em;white-space:nowrap;
+}
+/* 胸口记忆核心：吸入动画终点 */
+.memory-core{
+  position:absolute;left:50%;top:56%;transform:translate(-50%,-50%);z-index:3;
+  width:10px;height:10px;border-radius:50%;
+  background:var(--accent);opacity:.55;
+  box-shadow:0 0 12px 2px var(--accent-soft);
+}
+.memory-core.pulse{animation:corepulse 600ms var(--ease-out)}
+@keyframes corepulse{0%{transform:translate(-50%,-50%) scale(1)}40%{transform:translate(-50%,-50%) scale(1.9);opacity:.9}100%{transform:translate(-50%,-50%) scale(1);opacity:.55}}
+/* —— 右侧指数窄栏（IndexPill · 非卡片）—— */
+.index-rail{
+  position:absolute;right:12px;top:0;bottom:150px;width:112px;
+  display:flex;flex-direction:column;justify-content:center;gap:12px;z-index:20;
+}
+.index-pill{
+  position:relative;text-align:left;
+  background:transparent;border:none;border-radius:var(--r-pillcard);
+  padding:10px 10px 10px 14px;min-height:64px;
+  display:flex;flex-direction:column;gap:3px;
+  transition:background var(--t-fast) var(--ease-out),transform var(--t-fast) var(--ease-out);
+}
+.index-pill::before{ /* 2px 状态色条 */
+  content:"";position:absolute;left:4px;top:12px;bottom:12px;width:2px;border-radius:1px;
+  background:var(--pill-color);opacity:.85;
+}
+.index-pill:hover{background:var(--pill-soft)}
+.index-pill:active{transform:scale(.97)}
+.index-pill .ip-head{display:flex;align-items:center;gap:5px}
+.index-pill .ip-icon{width:14px;height:14px;flex:none;color:var(--pill-color)}
+.index-pill .ip-label{font-size:10px;font-weight:600;letter-spacing:.08em;color:var(--text-3)}
+.index-pill .ip-word{font-size:var(--fs-status);font-weight:700;color:var(--pill-color);line-height:1.15;letter-spacing:.01em}
+.index-pill .ip-meta{display:flex;align-items:center;gap:6px}
+.index-pill .ip-trend{
+  font-size:10px;font-weight:600;padding:2px 6px;border-radius:var(--r-pill);
+  background:var(--pill-soft);color:var(--pill-color);white-space:nowrap;
+}
+.index-pill .ip-spark{width:40px;height:14px;flex:none;opacity:.9}
+.index-pill .ip-desc{font-size:11px;color:var(--text-2);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.index-pill .ip-fresh{font-size:9px;color:var(--text-3);margin-top:1px}
+/* —— 底部零摩擦记录栏 —— */
+.composer-zone{position:absolute;left:0;right:0;bottom:0;z-index:40;padding:0 16px calc(14px + env(safe-area-inset-bottom,0px));}
+.composer{
+  display:flex;align-items:center;gap:10px;
+  background:var(--glass-bg);
+  border:1px solid var(--glass-border);
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  border-radius:var(--r-pill);
+  padding:8px 10px;min-height:64px;
+  box-shadow:0 12px 40px rgba(0,0,0,.32);
+}
+[data-theme="light"] .composer{box-shadow:0 12px 36px rgba(20,24,31,.12)}
+.c-btn{
+  width:46px;height:46px;border-radius:50%;flex:none;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--surface-alt);color:var(--text-2);
+  transition:all var(--t-fast) var(--ease-out);user-select:none;touch-action:none;
+}
+.c-btn:hover{color:var(--text-1)}
+.c-btn:active{transform:scale(.94)}
+.c-btn svg{width:21px;height:21px}
+.c-input-wrap{
+  flex:1;display:flex;align-items:center;gap:8px;
+  background:var(--bg);border:1px solid var(--border-soft);
+  border-radius:var(--r-pill);padding:0 8px 0 16px;min-height:46px;
+}
+.c-input{
+  flex:1;background:none;border:none;outline:none;
+  color:var(--text-1);font-size:var(--fs-body);font-family:inherit;
+}
+.c-input::placeholder{color:var(--text-3)}
+.c-send{
+  width:34px;height:34px;border-radius:50%;flex:none;
+  display:none;align-items:center;justify-content:center;
+  background:var(--accent);color:#fff;
+  transition:transform var(--t-fast) var(--ease-out);
+}
+.c-send.show{display:flex}
+.c-send:active{transform:scale(.9)}
+.c-btn.recording{background:var(--err);color:#fff}
+.c-btn.locked{background:var(--accent);color:#fff}
+/* 录音手势覆盖层 */
+.voice-overlay{
+  position:absolute;left:16px;right:16px;bottom:96px;z-index:45;
+  border-radius:var(--r-sheet);
+  background:var(--surface);border:1px solid var(--border-soft);
+  padding:16px;display:none;flex-direction:column;gap:12px;
+  box-shadow:0 18px 50px rgba(0,0,0,.4);
+}
+.voice-overlay.show{display:flex}
+.vo-head{display:flex;align-items:center;justify-content:space-between}
+.vo-time{font-size:var(--fs-title);font-weight:700;font-variant-numeric:tabular-nums}
+.vo-state{font-size:var(--fs-tiny);color:var(--err);font-weight:600}
+.vo-state.locked{color:var(--accent)}
+.vo-wave{display:flex;align-items:center;gap:3px;height:36px;justify-content:center}
+.vo-wave i{width:3px;border-radius:2px;background:var(--err);animation:wave 1s var(--ease-inout) infinite}
+.vo-state.locked ~ .vo-wave i,.voice-overlay.locked .vo-wave i{background:var(--accent)}
+@keyframes wave{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}
+.vo-hints{display:flex;justify-content:space-between;font-size:11px;color:var(--text-3)}
+.vo-hint{display:flex;align-items:center;gap:5px;transition:color var(--t-fast)}
+.vo-hint.hot{color:var(--text-1);font-weight:600}
+.vo-hint.cancel.hot{color:var(--err)}
+.vo-actions{display:none;gap:10px}
+.voice-overlay.locked .vo-actions{display:flex}
+.voice-overlay.locked .vo-hints{display:none}
+.vo-act{flex:1;padding:12px;border-radius:var(--r-pill);font-size:14px;font-weight:600;text-align:center}
+.vo-act.send{background:var(--accent);color:#fff}
+.vo-act.cancel{background:var(--surface-alt);color:var(--text-2)}
+/* 保存反馈条（含撤回 · 5s）*/
+.save-toast{
+  position:absolute;left:50%;bottom:170px;transform:translateX(-50%) translateY(12px);z-index:48;
+  display:flex;align-items:center;gap:10px;
+  background:var(--surface);border:1px solid var(--border-soft);
+  padding:9px 14px;border-radius:var(--r-pill);
+  box-shadow:0 10px 32px rgba(0,0,0,.38);
+  opacity:0;pointer-events:none;
+  transition:opacity var(--t-normal) var(--ease-out),transform var(--t-normal) var(--ease-out);
+  white-space:nowrap;
+}
+.save-toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+.save-toast .st-dot{width:7px;height:7px;border-radius:4px;background:var(--ok)}
+.save-toast .st-text{font-size:var(--fs-small);font-weight:500;color:var(--text-2)}
+.save-toast .st-undo{font-size:var(--fs-small);font-weight:700;color:var(--accent-muted);padding:2px 6px}
+.save-toast .st-undo:active{opacity:.6}
+/* 记忆吸入动画层 */
+.inhale-layer{position:absolute;inset:0;z-index:46;pointer-events:none}
+.inhale-chip{
+  position:absolute;padding:6px 12px;border-radius:var(--r-pill);
+  background:var(--surface);border:1px solid var(--border-soft);
+  font-size:12px;font-weight:500;color:var(--text-2);max-width:220px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.inhale-p{position:absolute;border-radius:50%}
+/* —— 指数解释 Sheet —— */
+.sheet-mask{
+  position:absolute;inset:0;z-index:70;background:rgba(5,7,10,.45);
+  opacity:0;pointer-events:none;transition:opacity var(--t-normal) var(--ease-out);
+}
+.sheet-mask.show{opacity:1;pointer-events:auto}
+.sheet{
+  position:absolute;left:0;right:0;bottom:0;z-index:71;
+  background:var(--surface);border-radius:var(--r-sheet) var(--r-sheet) 0 0;
+  border-top:1px solid var(--border-soft);
+  padding:10px 22px 30px;
+  transform:translateY(102%);transition:transform var(--t-slow) var(--ease-out);
+  max-height:78%;overflow-y:auto;
+}
+.sheet.show{transform:translateY(0)}
+.sheet .grab{display:block;width:36px;height:4px;border-radius:2px;background:var(--border);margin:4px auto 14px}
+.sheet .sh-kicker{font-size:11px;font-weight:600;letter-spacing:.1em;color:var(--pill-color,var(--accent-muted));margin-bottom:6px}
+.sheet .sh-say{font-size:19px;font-weight:700;line-height:1.4;margin-bottom:14px}
+.sheet .sh-block{padding:12px 0;border-top:1px solid var(--border-soft)}
+.sheet .sh-block h4{font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--text-3);margin-bottom:8px}
+.sheet .sh-block p{font-size:13px;color:var(--text-2);line-height:1.55}
+.sheet .sh-baseline{display:flex;align-items:flex-end;gap:5px;height:44px;margin-top:6px}
+.sheet .sh-baseline i{flex:1;border-radius:3px 3px 0 0;background:var(--surface-soft);position:relative}
+.sheet .sh-baseline i.cur{background:var(--pill-soft,var(--accent-soft));outline:1px solid var(--pill-color,var(--accent))}
+.sheet .sh-evidence{display:flex;gap:8px;flex-wrap:wrap}
+.sheet .sh-tag{font-size:11px;padding:5px 10px;border-radius:var(--r-pill);background:var(--surface-alt);color:var(--text-2);border:1px solid var(--border-soft)}
+.sheet .sh-actions{display:flex;gap:10px;margin-top:18px}
+.sheet .sh-act{flex:1;padding:13px 6px;border-radius:var(--r-pillcard);font-size:13px;font-weight:600;text-align:center;transition:all var(--t-fast)}
+.sheet .sh-act.primary{background:var(--pill-soft,var(--accent-soft));color:var(--pill-color,var(--accent))}
+.sheet .sh-act.ghost{background:var(--surface-alt);color:var(--text-2)}
+.sheet .sh-act:active{transform:scale(.97)}
+/* —— 关闭 3D 降级布局 —— */
+.mirror-2d{
+  position:absolute;left:16px;top:150px;width:230px;display:none;z-index:15;
+  background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--r-sheet);
+  padding:22px 20px;flex-direction:column;gap:10px;
+}
+.mirror-2d .m2-date{font-size:11px;color:var(--text-3);letter-spacing:.06em}
+.mirror-2d .m2-say{font-size:17px;font-weight:700;line-height:1.45}
+.mirror-2d .m2-sub{font-size:12px;color:var(--text-2);line-height:1.5}
+.mirror-2d .m2-link{font-size:12px;font-weight:600;color:var(--accent-muted);margin-top:4px}
+.phone.no3d .mirror-stage,.phone.no3d .stage-glow,.phone.no3d .ground-shadow{display:none}
+.phone.no3d .mirror-2d{display:flex}
+/* ══════════ 侧栏：令牌与规格 ══════════ */
+.panel{background:#12151C;border:1px solid #232936;border-radius:20px;padding:20px}
+.panel h3{font-size:12px;font-weight:700;letter-spacing:.12em;color:#8A93A3;margin-bottom:14px}
+.tok-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px dashed #1E2430;font-size:12px}
+.tok-row:last-child{border-bottom:none}
+.tok-sw{width:26px;height:26px;border-radius:8px;flex:none;border:1px solid rgba(255,255,255,.09)}
+.tok-name{color:#C7CEDA;font-weight:600;min-width:86px}
+.tok-val{color:#6E7889;font-family:"JetBrains Mono",monospace;font-size:11px;margin-left:auto}
+.spec-list{display:flex;flex-direction:column;gap:0}
+.spec-item{padding:10px 0;border-bottom:1px dashed #1E2430;font-size:12px;line-height:1.6;color:#AEB7C6}
+.spec-item:last-child{border-bottom:none}
+.spec-item b{color:#EDF1F6;font-weight:600}
+.spec-item .num{
+  display:inline-flex;width:18px;height:18px;border-radius:50%;background:#5B7CFF;color:#fff;
+  font-size:10px;font-weight:700;align-items:center;justify-content:center;margin-right:8px;flex:none;
+}
+.spec-item code{background:#1B212C;padding:1px 6px;border-radius:6px;font-size:11px;color:#8FA3FF;font-family:"JetBrains Mono",monospace}
+/* 演示控制 */
+.demo-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.demo-btn{
+  padding:8px 13px;border-radius:var(--r-pill);font-size:12px;font-weight:600;
+  background:#1B212C;color:#C7CEDA;border:1px solid #2A3240;
+  transition:all var(--t-fast) var(--ease-out);
+}
+.demo-btn:hover{border-color:#5B7CFF;color:#fff}
+/* 标注点 */
+.anno{
+  position:absolute;z-index:80;width:20px;height:20px;border-radius:50%;
+  background:var(--accent);color:#fff;font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 0 4px rgba(91,124,255,.22);cursor:default;
+}
+.flow-note{margin-top:22px;font-size:12px;color:#6E7889;line-height:1.7}
+.flow-note b{color:#AEB7C6}
+footer{margin-top:40px;padding-top:18px;border-top:1px solid #1E2430;font-size:11px;color:#5A6372;line-height:1.8}
+@media (prefers-reduced-motion: reduce){
+  .twin-breathe,.twin-eyes,.vo-wave i{animation:none !important}
+}
+</style>
+</head>
+<body>
+<div class="workbench">
+  <div class="wb-head">
+    <div class="wb-title">
+      <h1>知镜行 Satori · 镜像主界面 <span style="color:#5B7CFF">V4.7</span> 设计定型</h1>
+      <p>Quiet Spatial UI · <b>落地镜台</b> 替代圆形相框 · <b>指数签</b> 替代三张大卡 · 语音手势补全 · 吸入动效 900ms 定型 · 可交互原型，可直接操作</p>
+    </div>
+    <div class="wb-controls">
+      <button class="ctl-btn" id="themeBtn" onclick="toggleTheme()">切换浅色</button>
+      <button class="ctl-btn" id="no3dBtn" onclick="toggle3D()">关闭 3D（降级）</button>
+      <button class="ctl-btn" id="streamBtn" onclick="toggleStream()">感知流：有内容</button>
+    </div>
+  </div>
+
+  <div class="wb-grid">
+    <!-- ═══ 左侧：设计令牌 ═══ -->
+    <aside class="side-l">
+      <div class="panel">
+        <h3>色彩令牌 · 深色基准</h3>
+        <div class="tok-row"><span class="tok-sw" style="background:#0E1116"></span><span class="tok-name">页面底</span><span class="tok-val">#0E1116</span></div>
+        <div class="tok-row"><span class="tok-sw" style="background:#171C24"></span><span class="tok-name">一级表面</span><span class="tok-val">#171C24</span></div>
+        <div class="tok-row"><span class="tok-sw" style="background:#EDF1F6"></span><span class="tok-name">主文本</span><span class="tok-val">#EDF1F6</span></div>
+        <div class="tok-row"><span class="tok-sw" style="background:#5B7CFF"></span><span class="tok-name">品牌靛（唯一强调）</span><span class="tok-val">#5B7CFF</span></div>
+        <div class="tok-row"><span class="tok-sw" style="background:#9B7BE0"></span><span class="tok-name">情绪镜 · 堇</span><span class="tok-val">#9B7BE0</span></div>
+        <div class="tok-row"><span class="tok-sw" style="background:#4DB6AC"></span><span class="tok-name">健康镜 · 青</span><span class="tok-val">#4DB6AC</span></div>
+        <div class="tok-row"><span class="tok-sw" style="background:#E8A13D"></span><span class="tok-name">规划镜 · 桂</span><span class="tok-val">#E8A13D</span></div>
+      </div>
+      <div class="panel" style="margin-top:20px">
+        <h3>动效令牌</h3>
+        <div class="tok-row"><span class="tok-name">fast / 按压</span><span class="tok-val">150ms</span></div>
+        <div class="tok-row"><span class="tok-name">normal / 反馈</span><span class="tok-val">250ms</span></div>
+        <div class="tok-row"><span class="tok-name">slow / Sheet</span><span class="tok-val">400ms</span></div>
+        <div class="tok-row"><span class="tok-name">记忆吸入</span><span class="tok-val">900ms</span></div>
+        <div class="tok-row"><span class="tok-name">缓动</span><span class="tok-val">cubic-bezier(.22,1,.36,1)</span></div>
+        <div class="tok-row"><span class="tok-name">呼吸周期</span><span class="tok-val">4.8s ±1.4%</span></div>
+        <div class="tok-row"><span class="tok-name">眨眼</span><span class="tok-val">≈6s 单次 120ms</span></div>
+      </div>
+      <div class="panel" style="margin-top:20px">
+        <h3>空间令牌（390×844 基准）</h3>
+        <div class="tok-row"><span class="tok-name">顶部感知流区</span><span class="tok-val">≤118px · 14%</span></div>
+        <div class="tok-row"><span class="tok-name">舞台视宽</span><span class="tok-val">236px · 60%</span></div>
+        <div class="tok-row"><span class="tok-name">指数窄栏</span><span class="tok-val">112px · 右 12px</span></div>
+        <div class="tok-row"><span class="tok-name">指数签高/距</span><span class="tok-val">≥64px / 12px</span></div>
+        <div class="tok-row"><span class="tok-name">底部记录栏区</span><span class="tok-val">≈140px · 17%</span></div>
+        <div class="tok-row"><span class="tok-name">触控目标</span><span class="tok-val">≥48dp</span></div>
+      </div>
+    </aside>
+
+    <!-- ═══ 中间：手机 ═══ -->
+    <div class="stage-wrap">
+      <div class="phone" id="phone">
+        <div class="statusbar">
+          <span>17:46</span>
+          <span class="sb-icons">
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1" opacity=".4"/></svg>
+            <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor" opacity=".4"/><rect x="2.5" y="2.5" width="14" height="7" rx="1.5" fill="currentColor"/><path d="M23.5 4v4a2 2 0 0 0 0-4z" fill="currentColor" opacity=".4"/></svg>
+          </span>
+        </div>
+
+        <!-- 顶部感知流 -->
+        <div class="perception" id="perception">
+          <div class="p-row">
+            <span class="p-date">7月29日 周三</span>
+            <button class="p-why" onclick="whyThis(event)">为什么看到</button>
+          </div>
+          <div class="p-row">
+            <div class="p-item">
+              <span class="p-dot"></span>
+              <span class="p-text">19:00 前把周报初稿发给导师 · 还剩 1 小时</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 中央舞台：落地镜台 -->
+        <div class="stage-glow"></div>
+        <div class="ground-shadow"></div>
+        <div class="mirror-stage" id="stage">
+          <div class="twin" id="twin">
+            <div class="twin-breathe" id="twinBody"></div>
+            <div class="memory-core" id="memoryCore"></div>
+          </div>
+          <div class="stage-caption">现在的我 · 轻触进入镜子</div>
+        </div>
+
+        <!-- 关闭 3D 的降级镜像 -->
+        <div class="mirror-2d">
+          <span class="m2-date">现在的我 · 2D 镜像</span>
+          <span class="m2-say">这周留下了 6 条记录，推进了 1 件重要的事。</span>
+          <span class="m2-sub">3D 已关闭。镜像改为静态呈现，三项状态与记录栏保持原位。</span>
+          <button class="m2-link" onclick="alert('进入时间线（原型演示）')">查看时间线 →</button>
+        </div>
+
+        <!-- 右侧指数窄栏 -->
+        <div class="index-rail" id="indexRail">
+          <button class="index-pill" style="--pill-color:var(--mirror-emotion);--pill-soft:var(--mirror-emotion-soft)" onclick="openSheet('emotion')">
+            <span class="ip-head">
+              <svg class="ip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>
+              <span class="ip-label">情绪</span>
+            </span>
+            <span class="ip-word">略紧绷</span>
+            <span class="ip-meta">
+              <span class="ip-trend">趋于平静</span>
+              <svg class="ip-spark" viewBox="0 0 40 14"><polyline points="0,11 5,9 10,10 15,7 20,8 25,5 30,6 35,4 40,5" fill="none" stroke="var(--mirror-emotion)" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </span>
+            <span class="ip-desc">近 3 天记录里紧绷词减少</span>
+            <span class="ip-fresh">2 小时前更新</span>
+          </button>
+
+          <button class="index-pill" style="--pill-color:var(--mirror-health);--pill-soft:var(--mirror-health-soft)" onclick="openSheet('health')">
+            <span class="ip-head">
+              <svg class="ip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+              <span class="ip-label">健康</span>
+            </span>
+            <span class="ip-word">待接入</span>
+            <span class="ip-meta"><span class="ip-trend">未授权</span></span>
+            <span class="ip-desc">连接健康数据后可见趋势</span>
+            <span class="ip-fresh">随时可断开</span>
+          </button>
+
+          <button class="index-pill" style="--pill-color:var(--mirror-plan);--pill-soft:var(--mirror-plan-soft)" onclick="openSheet('plan')">
+            <span class="ip-head">
+              <svg class="ip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.2 7.8 14.1 14.1 7.8 16.2 9.9 9.9 16.2 7.8"/></svg>
+              <span class="ip-label">规划</span>
+            </span>
+            <span class="ip-word">2 项冲突</span>
+            <span class="ip-meta"><span class="ip-trend">需取舍</span></span>
+            <span class="ip-desc">周报与体检陪诊时间重叠</span>
+            <span class="ip-fresh">刚刚更新</span>
+          </button>
+        </div>
+
+        <!-- 录音覆盖层 -->
+        <div class="voice-overlay" id="voiceOverlay">
+          <div class="vo-head">
+            <span class="vo-time" id="voTime">0:00</span>
+            <span class="vo-state" id="voState">正在录音</span>
+          </div>
+          <div class="vo-wave" id="voWave"></div>
+          <div class="vo-hints">
+            <span class="vo-hint" id="hintLock">↑ 上滑锁定</span>
+            <span class="vo-hint cancel" id="hintCancel">← 左滑取消</span>
+          </div>
+          <div class="vo-actions">
+            <button class="vo-act cancel" onclick="voiceCancel()">取消</button>
+            <button class="vo-act send" onclick="voiceSend()">发送语音</button>
+          </div>
+        </div>
+
+        <!-- 吸入动画层 -->
+        <div class="inhale-layer" id="inhaleLayer"></div>
+
+        <!-- 保存反馈 -->
+        <div class="save-toast" id="saveToast">
+          <span class="st-dot"></span>
+          <span class="st-text" id="saveToastText">已收进今天</span>
+          <button class="st-undo" onclick="undoSave()">撤回</button>
+        </div>
+
+        <!-- 底部记录栏 -->
+        <div class="composer-zone">
+          <div class="composer">
+            <button class="c-btn" aria-label="拍照记录" onclick="saveRecord('📷 一张照片')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </button>
+            <div class="c-input-wrap">
+              <input class="c-input" id="textInput" placeholder="说点什么…" autocomplete="off">
+              <button class="c-send" id="sendBtn" aria-label="发送" onclick="submitText()">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+              </button>
+            </div>
+            <button class="c-btn" id="voiceBtn" aria-label="语音记录">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- 指数 Sheet -->
+        <div class="sheet-mask" id="sheetMask" onclick="closeSheet()"></div>
+        <div class="sheet" id="sheet">
+          <span class="grab"></span>
+          <div class="sh-kicker" id="shKicker">情绪镜 · 为什么这样判断</div>
+          <div class="sh-say" id="shSay">最近几天你记录里的紧绷感在减少，但睡眠偏短让它恢复得慢。</div>
+          <div class="sh-block">
+            <h4>个人基线对比（近 30 天）</h4>
+            <div class="sh-baseline" id="shBaseline"></div>
+            <p style="margin-top:8px">当前略低于你的常态区间下限，不属于异常。</p>
+          </div>
+          <div class="sh-block">
+            <h4>来源与时间范围</h4>
+            <p>近 7 天 · 4 条文字记录、1 段语音转写。没有使用健康设备数据。</p>
+          </div>
+          <div class="sh-block">
+            <h4>不确定与反向证据</h4>
+            <p>周二的记录偏积极；样本仍少，判断可能随新记录改变。</p>
+            <div class="sh-evidence" style="margin-top:10px">
+              <span class="sh-tag">7-26 「总算弄完了」</span>
+              <span class="sh-tag">7-27 语音 00:42</span>
+              <span class="sh-tag">7-28 「还是卡住」</span>
+            </div>
+          </div>
+          <div class="sh-actions">
+            <button class="sh-act primary" onclick="sheetAct('这不像我')">这不像我</button>
+            <button class="sh-act ghost" onclick="sheetAct('改一下')">改一下</button>
+            <button class="sh-act ghost" onclick="sheetAct('暂时不显示')">暂时不显示</button>
+          </div>
+        </div>
+
+        <!-- 标注 -->
+        <span class="anno" style="top:60px;right:6px" title="感知流">1</span>
+        <span class="anno" style="top:44%;left:8px" title="落地镜台">2</span>
+        <span class="anno" style="top:38%;right:126px" title="指数签">3</span>
+        <span class="anno" style="bottom:160px;right:6px" title="记录栏">4</span>
+      </div>
+    </div>
+
+    <!-- ═══ 右侧：规格与演示 ═══ -->
+    <aside class="side-r">
+      <div class="panel">
+        <h3>V4.7 关键决策</h3>
+        <div class="spec-list">
+          <div class="spec-item"><span class="num">1</span><b>感知流</b>：玻璃参数定型 —— 底 62–68% 不透明、<code>blur 20px</code>、圆角 18px、1px 8% 边框；空态缩为单行问候，一次一个对象，主动作 ≤1、次动作 ≤2。</div>
+          <div class="spec-item"><span class="num">2</span><b>落地镜台</b>：去除圆形相框与脉冲光环；人物落地站立 + 地面接触阴影 + 静态光晕；呼吸 4.8s ±1.4%，眨眼 ≈6s 单次；胸口为记忆核心（吸入终点，非嘴部）。</div>
+          <div class="spec-item"><span class="num">3</span><b>指数签 IndexPill</b>：替代三张大卡 —— 无边框无投影，2px 色条 + 状态词 17px + 趋势微标签 + 8 点迷你趋势线 + 一行说明 + 新鲜度；点击进入解释 Sheet。不是评分，不抢视觉中心。</div>
+          <div class="spec-item"><span class="num">4</span><b>零摩擦记录栏</b>：语音 <b>点按</b>=开始/结束；<b>长按</b>=说话；<b>上滑 40px</b>=锁定；<b>左滑 60px</b>=取消（红色态）；锁定后点发送/取消。全部手势均有按钮替代。</div>
+          <div class="spec-item"><span class="num">5</span><b>记忆吸入</b>：<code>900ms</code> 贝塞尔轨迹 → 胸口核心；粒子 5–7 枚、≤4px、透明度 ≤0.6、无发光；原文保留 350ms 可读；动画不阻塞记录栏；随后反馈 <b>「已收进今天 · 撤回」</b>（撤回 5s 有效）。</div>
+          <div class="spec-item"><span class="num">6</span><b>降级路径</b>：关闭 3D → 静态 2D 镜像卡，指数栏与记录栏原位保留；减少动效/读屏/低性能 → 静态文字「已保存到……」，功能等价。</div>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:20px">
+        <h3>交互演示</h3>
+        <div class="demo-row">
+          <button class="demo-btn" onclick="saveRecord('今天把周报框架搭完了，比想象顺利')">文字记录 → 吸入</button>
+          <button class="demo-btn" onclick="demoVoice()">语音手势演示</button>
+          <button class="demo-btn" onclick="openSheet('emotion')">指数解释 Sheet</button>
+          <button class="demo-btn" onclick="saveRecord('🎤 一段语音',true)">离线保存演示</button>
+        </div>
+        <p class="flow-note" style="margin-top:14px">
+          <b>试用路径：</b>在输入框打字 → 出现发送键 → 发送后观察 900ms 吸入与撤回条；按住麦克风不放尝试上滑/左滑；点右侧任一指数签打开 Sheet。
+        </p>
+      </div>
+    </aside>
+  </div>
+
+  <footer>
+    知镜行 Satori · 镜像主界面 V4.7 设计定型原型（design/satori-mirror-v47.html）· 与项目书 V4.7 第三章 3.6/3.8/3.9 节同步 · 3D 孪生体在本原型中以 SVG 占位，生产实现为 react-native-filament 参数化卡通 GLB · 令牌与代码 src/theme/theme.ts classic-dark 对齐 · 2026-07-29
+  </footer>
+</div>
+
+<script>
+/* ═══════ 孪生体（SVG 占位 · 卡通但克制）═══════ */
+(function buildTwin(){
+  const skin='#E8B98F', skinDark='#D9A97E', ink='#2B3345', inkLight='#3A4358', accent='#5B7CFF';
+  document.getElementById('twinBody').innerHTML = `
+  <svg width="196" height="360" viewBox="0 0 196 360" fill="none">
+    <!-- 腿 -->
+    <rect x="76" y="282" width="17" height="58" rx="8.5" fill="${ink}"/>
+    <rect x="103" y="282" width="17" height="58" rx="8.5" fill="${ink}"/>
+    <ellipse cx="82" cy="344" rx="14" ry="7" fill="${inkLight}"/>
+    <ellipse cx="114" cy="344" rx="14" ry="7" fill="${inkLight}"/>
+    <!-- 身体：温和圆领长衫 -->
+    <path d="M98 168 C60 168 48 200 50 236 L54 292 C55 302 63 306 73 306 L123 306 C133 306 141 302 142 292 L146 236 C148 200 136 168 98 168 Z" fill="${ink}"/>
+    <path d="M50 236 L54 292 C55 302 63 306 73 306 L98 306 L98 168 C60 168 48 200 50 236 Z" fill="${inkLight}" opacity=".35"/>
+    <!-- 手臂：自然下垂 -->
+    <path d="M52 186 C40 196 36 222 40 248 C41 256 48 259 53 255 C57 252 56 246 56 240 C55 222 58 206 64 196 Z" fill="${ink}"/>
+    <path d="M144 186 C156 196 160 222 156 248 C155 256 148 259 143 255 C139 252 140 246 140 240 C141 222 138 206 132 196 Z" fill="${ink}"/>
+    <circle cx="46" cy="254" r="9" fill="${skin}"/>
+    <circle cx="150" cy="254" r="9" fill="${skin}"/>
+    <!-- 胸口记忆核心底座 -->
+    <circle cx="98" cy="222" r="12" fill="${accent}" opacity=".18"/>
+    <circle cx="98" cy="222" r="5.5" fill="${accent}" opacity=".8"/>
+    <!-- 头：2.6 头身比，圆润不幼态 -->
+    <circle cx="98" cy="104" r="62" fill="${skin}"/>
+    <circle cx="98" cy="104" r="62" fill="url(#shade)" opacity=".5"/>
+    <!-- 发：简洁短发 -->
+    <path d="M36 100 C32 52 62 30 98 30 C134 30 164 52 160 100 C158 88 150 74 140 70 C146 84 144 92 142 96 C138 72 120 58 98 58 C76 58 58 72 54 96 C52 92 50 84 56 70 C46 74 38 88 36 100 Z" fill="${ink}"/>
+    <!-- 眼：平静微垂，不瞪视 -->
+    <g class="twin-eyes" style="transform-origin:78px 106px">
+      <ellipse cx="78" cy="106" rx="7.5" ry="8.5" fill="#23283A"/>
+      <circle cx="80.5" cy="103" r="2.4" fill="#fff" opacity=".85"/>
+    </g>
+    <g class="twin-eyes" style="transform-origin:118px 106px">
+      <ellipse cx="118" cy="106" rx="7.5" ry="8.5" fill="#23283A"/>
+      <circle cx="120.5" cy="103" r="2.4" fill="#fff" opacity=".85"/>
+    </g>
+    <!-- 眉：放松 -->
+    <path d="M68 90 Q78 86 88 90" stroke="${ink}" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+    <path d="M108 90 Q118 86 128 90" stroke="${ink}" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+    <!-- 腮红：极淡 -->
+    <ellipse cx="66" cy="124" rx="8" ry="4.5" fill="${skinDark}" opacity=".45"/>
+    <ellipse cx="130" cy="124" rx="8" ry="4.5" fill="${skinDark}" opacity=".45"/>
+    <!-- 嘴：安静微弧，不笑不丧 -->
+    <path d="M88 132 Q98 137 108 132" stroke="#B98866" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+    <defs>
+      <radialGradient id="shade" cx="0.38" cy="0.32" r="0.9">
+        <stop offset="0%" stop-color="#fff" stop-opacity=".28"/>
+        <stop offset="100%" stop-color="#000" stop-opacity=".08"/>
+      </radialGradient>
+    </defs>
+  </svg>`;
+})();
+
+/* ═══════ 主题 / 3D / 感知流切换 ═══════ */
+const phone = document.getElementById('phone');
+let light=false, streamEmpty=false;
+function toggleTheme(){
+  light=!light;
+  phone.setAttribute('data-theme', light?'light':'dark');
+  document.getElementById('themeBtn').textContent = light?'切换深色':'切换浅色';
+  document.getElementById('themeBtn').classList.toggle('on', light);
+}
+toggleTheme();toggleTheme(); // init dark
+function toggle3D(){
+  phone.classList.toggle('no3d');
+  const off = phone.classList.contains('no3d');
+  document.getElementById('no3dBtn').textContent = off?'开启 3D':'关闭 3D（降级）';
+  document.getElementById('no3dBtn').classList.toggle('on', off);
+}
+function toggleStream(){
+  streamEmpty=!streamEmpty;
+  const p=document.getElementById('perception');
+  if(streamEmpty){
+    p.classList.add('empty');
+    p.innerHTML='<span class="p-date">7月29日 周三</span><span class="p-greet">下午好 · 此刻没有需要你看的事</span>';
+  }else{
+    p.classList.remove('empty');
+    p.innerHTML=`<div class="p-row"><span class="p-date">7月29日 周三</span><button class="p-why" onclick="whyThis(event)">为什么看到</button></div>
+    <div class="p-row"><div class="p-item"><span class="p-dot"></span><span class="p-text">19:00 前把周报初稿发给导师 · 还剩 1 小时</span></div></div>`;
+  }
+  document.getElementById('streamBtn').textContent = streamEmpty?'感知流：空态':'感知流：有内容';
+}
+function whyThis(e){
+  e.stopPropagation();
+  toast('因为它与今天截止的「在做」事项直接相关');
+}
+
+/* ═══════ 记录栏 · 文字 ═══════ */
+const textInput=document.getElementById('textInput'), sendBtn=document.getElementById('sendBtn');
+textInput.addEventListener('input',()=>sendBtn.classList.toggle('show', textInput.value.trim().length>0));
+textInput.addEventListener('keydown',e=>{if(e.key==='Enter')submitText()});
+function submitText(){
+  const t=textInput.value.trim(); if(!t)return;
+  textInput.value=''; sendBtn.classList.remove('show');
+  saveRecord(t);
+}
+
+/* ═══════ 语音手势：点按 / 长按 / 上滑锁定 / 左滑取消 ═══════ */
+const voiceBtn=document.getElementById('voiceBtn'), overlay=document.getElementById('voiceOverlay'),
+      voTime=document.getElementById('voTime'), voState=document.getElementById('voState'),
+      hintLock=document.getElementById('hintLock'), hintCancel=document.getElementById('hintCancel');
+let vPressing=false,vStart=0,vTimer=null,vLocked=false,vCanceling=false,vStartY=0,vStartX=0,vTapTimer=null,vRecordingTap=false;
+const wave=document.getElementById('voWave');
+for(let i=0;i<24;i++){const b=document.createElement('i');b.style.height=(8+Math.random()*26)+'px';b.style.animationDelay=(Math.random()*.8)+'s';wave.appendChild(b);}
+function fmt(s){return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0')}
+function startVoice(){
+  overlay.classList.add('show');overlay.classList.remove('locked');
+  voiceBtn.classList.add('recording');voState.textContent='正在录音';voState.className='vo-state';
+  vStart=Date.now();vLocked=false;vCanceling=false;
+  hintLock.classList.remove('hot');hintCancel.classList.remove('hot');
+  vTimer=setInterval(()=>voTime.textContent=fmt((Date.now()-vStart)/1000),200);
+  voTime.textContent='0:00';
+}
+function endVoice(commit){
+  clearInterval(vTimer);overlay.classList.remove('show','locked');
+  voiceBtn.classList.remove('recording','locked');
+  if(commit) saveRecord('🎤 语音 '+voTime.textContent);
+}
+voiceBtn.addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  vPressing=true;vStartY=e.clientY;vStartX=e.clientX;
+  vTapTimer=setTimeout(()=>{startVoice()},180); /* 长按阈值 180ms */
+});
+window.addEventListener('pointermove',e=>{
+  if(!vPressing||!overlay.classList.contains('show')||vLocked)return;
+  const dy=vStartY-e.clientY, dx=vStartX-e.clientX;
+  hintLock.classList.toggle('hot', dy>24);
+  hintCancel.classList.toggle('hot', dx>36);
+  if(dy>40){ /* 上滑 40px 锁定 */
+    vLocked=true;overlay.classList.add('locked');
+    voiceBtn.classList.remove('recording');voiceBtn.classList.add('locked');
+    voState.textContent='已锁定 · 免按住';voState.className='vo-state locked';
+  }
+  vCanceling = dx>60; /* 左滑 60px 取消 */
+  voState.textContent = vCanceling ? '松开取消' : (vLocked?'已锁定 · 免按住':'正在录音');
+  voState.style.color = vCanceling ? 'var(--err)' : '';
+});
+window.addEventListener('pointerup',()=>{
+  if(!vPressing)return; vPressing=false; clearTimeout(vTapTimer);
+  if(!overlay.classList.contains('show'))return;
+  if(vLocked)return; /* 锁定态由按钮收尾 */
+  endVoice(!vCanceling);
+});
+function voiceSend(){endVoice(true)}
+function voiceCancel(){endVoice(false)}
+function demoVoice(){
+  toast('按住麦克风：上滑锁定 · 左滑取消；点按也可开始/结束');
+}
+
+/* ═══════ 记忆吸入（900ms 定型）═══════ */
+const layer=document.getElementById('inhaleLayer'), core=document.getElementById('memoryCore');
+function saveRecord(text, offline){
+  /* 起点：记录栏中心；终点：胸口记忆核心（3D 关闭时为 2D 镜像卡） */
+  const pr=phone.getBoundingClientRect();
+  const sx=pr.width/2, sy=pr.height-120;
+  let ex=pr.width*0.335, ey=pr.height*0.50;
+  if(phone.classList.contains('no3d')){ex=130;ey=230;}
+  const chip=document.createElement('div');
+  chip.className='inhale-chip';chip.textContent=text;
+  chip.style.left=sx+'px';chip.style.top=sy+'px';chip.style.transform='translate(-50%,-50%)';
+  layer.appendChild(chip);
+  const dx=ex-sx, dy=ey-sy, cx=dx*0.25, cy=dy*0.55-60; /* 贝塞尔控制偏移：先缓升后入怀 */
+  const anim=chip.animate([
+    {transform:'translate(-50%,-50%) translate(0px,0px) scale(1)',opacity:1,offset:0},
+    {transform:`translate(-50%,-50%) translate(${cx}px,${cy}px) scale(.82)`,opacity:1,offset:.38},
+    {transform:`translate(-50%,-50%) translate(${dx}px,${dy}px) scale(.4)`,opacity:.15,offset:1}
+  ],{duration:900,easing:'cubic-bezier(.22,1,.36,1)'});
+  /* 粒子 6 枚：≤4px、透明度≤0.6、无发光 */
+  for(let i=0;i<6;i++){
+    const p=document.createElement('div');p.className='inhale-p';
+    const s=2+Math.random()*2;
+    p.style.cssText=`left:${sx}px;top:${sy}px;width:${s}px;height:${s}px;background:${i%2?'var(--accent)':'var(--text-3)'};opacity:0`;
+    layer.appendChild(p);
+    const jx=dx+(Math.random()-.5)*36, jy=dy+(Math.random()-.5)*30;
+    p.animate([
+      {transform:'translate(0,0) scale(.4)',opacity:0},
+      {transform:`translate(${jx*.45}px,${jy*.45}px) scale(1)`,opacity:.55,offset:.5},
+      {transform:`translate(${jx}px,${jy}px) scale(.2)`,opacity:0}
+    ],{duration:900,delay:120+i*70,easing:'cubic-bezier(.22,1,.36,1)'}).onfinish=()=>p.remove();
+  }
+  anim.onfinish=()=>{
+    chip.remove();
+    core.classList.remove('pulse');void core.offsetWidth;core.classList.add('pulse');
+    showToast(offline?'已存本机，联网后同步':'已收进今天');
+  };
+  /* 减少动效偏好：静态等价反馈 */
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    anim.cancel();chip.remove();
+    showToast('已保存到今天');
+  }
+}
+
+/* ═══════ 保存反馈 + 撤回（5s）═══════ */
+const saveToast=document.getElementById('saveToast'),stText=document.getElementById('saveToastText');
+let toastTimer=null,undoTimer=null;
+function showToast(msg){
+  stText.textContent=msg;
+  saveToast.classList.add('show');
+  clearTimeout(toastTimer);clearTimeout(undoTimer);
+  toastTimer=setTimeout(()=>saveToast.classList.remove('show'),5000);
+  undoTimer=setTimeout(()=>{document.querySelector('.st-undo').style.visibility='hidden'},5000);
+  document.querySelector('.st-undo').style.visibility='visible';
+}
+function undoSave(){
+  saveToast.classList.remove('show');
+  setTimeout(()=>toast('已撤回 · 内容没有留下'),250);
+}
+function toast(msg){
+  stText.textContent=msg;
+  document.querySelector('.st-undo').style.visibility='hidden';
+  saveToast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>saveToast.classList.remove('show'),2600);
+}
+
+/* ═══════ 指数解释 Sheet ═══════ */
+const sheet=document.getElementById('sheet'),mask=document.getElementById('sheetMask');
+const sheetData={
+  emotion:{color:'var(--mirror-emotion)',soft:'var(--mirror-emotion-soft)',kicker:'情绪镜 · 为什么这样判断',
+    say:'最近几天你记录里的紧绷感在减少，但睡眠偏短让它恢复得慢。',
+    bars:[.5,.62,.45,.7,.55,.66,.58,.42],note:'当前略低于你的常态区间下限，不属于异常。',
+    src:'近 7 天 · 4 条文字记录、1 段语音转写。没有使用健康设备数据。',
+    unsure:'周二的记录偏积极；样本仍少，判断可能随新记录改变。',
+    tags:['7-26 「总算弄完了」','7-27 语音 00:42','7-28 「还是卡住」']},
+  health:{color:'var(--mirror-health)',soft:'var(--mirror-health-soft)',kicker:'健康镜 · 还没有数据',
+    say:'连接健康数据源后，这里会显示相对你自己常态的趋势，而不是和别人比较。',
+    bars:[0,0,0,0,0,0,0,0],note:'未授权状态下不做任何猜测。',
+    src:'当前没有任何健康数据。授权只读取你选择的范围，可随时断开。',
+    unsure:'不使用群体常模推断你的健康状态。',
+    tags:['授权入口','本地优先']},
+  plan:{color:'var(--mirror-plan)',soft:'var(--mirror-plan-soft)',kicker:'规划镜 · 两项安排冲突',
+    say:'周四上午的体检陪诊和周报例会时间重叠，需要你来取舍。',
+    bars:[.4,.5,.45,.6,.55,.7,.65,.8],note:'冲突只陈述事实，不替你决定。',
+    src:'日程 2 项、承诺 1 项 · 今天 09:12 更新。',
+    unsure:'例会有线上参加的可能，冲突强度中等。',
+    tags:['体检陪诊 周四 9:00','周报例会 周四 10:00']}
+};
+function openSheet(key){
+  const d=sheetData[key];
+  sheet.style.setProperty('--pill-color',d.color);
+  sheet.style.setProperty('--pill-soft',d.soft);
+  document.getElementById('shKicker').textContent=d.kicker;
+  document.getElementById('shSay').textContent=d.say;
+  const bl=document.getElementById('shBaseline');bl.innerHTML='';
+  d.bars.forEach((v,i)=>{const b=document.createElement('i');b.style.height=Math.max(6,v*100)+'%';if(i===d.bars.length-1&&v>0)b.className='cur';bl.appendChild(b);});
+  sheet.querySelectorAll('.sh-block')[0].querySelector('p').textContent=d.note;
+  sheet.querySelectorAll('.sh-block')[1].querySelector('p').textContent=d.src;
+  sheet.querySelectorAll('.sh-block')[2].querySelector('p').textContent=d.unsure;
+  const ev=sheet.querySelector('.sh-evidence');ev.innerHTML='';
+  d.tags.forEach(t=>{const s=document.createElement('span');s.className='sh-tag';s.textContent=t;ev.appendChild(s);});
+  mask.classList.add('show');sheet.classList.add('show');
+}
+function closeSheet(){mask.classList.remove('show');sheet.classList.remove('show')}
+function sheetAct(a){
+  closeSheet();
+  const map={'这不像我':'已记下：这条判断不再用于你','改一下':'进入修正（原型演示）','暂时不显示':'这项指数将静默 7 天'};
+  toast(map[a]||a);
+}
+</script>
+</body>
+</html>
