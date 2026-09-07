@@ -34,8 +34,22 @@ async function readAvatarRuntimeProbe(page: Page): Promise<AvatarRuntimeProbe> {
 async function setIdentitySliderToEnd(page: Page, label: string) {
   const slider = page.getByLabel(new RegExp(`^${label}，`)).first();
   await expect(slider).toBeVisible();
-  await slider.focus();
-  await slider.press('End');
+
+  // @react-native-community/slider on Web exposes role=slider but does not
+  // implement the browser's native End-key range behavior. Use an actual
+  // pointer/touch on the far-right of the rendered track, then verify the
+  // product's accessibility value changed before trusting renderer evidence.
+  const box = await slider.boundingBox();
+  if (!box) throw new Error(`${label} slider has no rendered bounding box`);
+  await slider.tap({
+    position: {
+      x: Math.max(1, box.width - 2),
+      y: Math.max(1, box.height / 2),
+    },
+  });
+  await expect(page.getByLabel(new RegExp(`^${label}，.*当前值 1\\.00，`)).first()).toBeVisible({
+    timeout: 5_000,
+  });
 }
 
 
