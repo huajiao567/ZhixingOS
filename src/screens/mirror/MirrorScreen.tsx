@@ -14,6 +14,7 @@ import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { Mirror3DPanel } from '../../mirror3d/integration';
 import { api, type WeeklyBriefResponse, type MonthlyBriefResponse } from '../../services/api';
 import { journalSourceLabel } from '../../ai-native/intake/journalRecord';
+import { preloadMirror3DEditor } from '../../mirror3d/screens/loadMirror3DEditor';
 
 type Tab = 'hypotheses' | 'timeline' | 'state' | 'weekly' | 'monthly';
 
@@ -33,6 +34,12 @@ export function MirrorScreen() {
   const navigation = useNavigation<any>();
   const isFocused = useIsFocused();
   const [domainFilter, setDomainFilter] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isFocused) return;
+    const timer = setTimeout(() => preloadMirror3DEditor(), 250);
+    return () => clearTimeout(timer);
+  }, [isFocused]);
 
   // ---------- 周镜状态（SubTask 10.4） ----------
   const [weeklyBrief, setWeeklyBrief] = useState<WeeklyBriefResponse | null>(null);
