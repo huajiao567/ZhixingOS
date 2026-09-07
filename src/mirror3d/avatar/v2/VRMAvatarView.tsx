@@ -110,14 +110,6 @@ type TintableMaterial = THREE.Material & {
   userData: Record<string, unknown>;
 };
 
-function materialRole(name: string): 'skin' | 'hair' | 'outfit' | null {
-  const normalized = name.toLowerCase();
-  if (/(eye|iris|pupil|white|mouth|teeth|tongue|lip)/.test(normalized)) return null;
-  if (/(hair|髪)/.test(normalized)) return 'hair';
-  if (/(skin|face|body|head|肌|顔)/.test(normalized)) return 'skin';
-  if (/(cloth|clothes|dress|shirt|jacket|top|bottom|outfit|uniform|shoe|socks|服|衣)/.test(normalized)) return 'outfit';
-  return null;
-}
 
 function applyConfirmedAppearanceToModel(root: THREE.Object3D, profile: AvatarProfileV2): void {
   const targets = {
@@ -134,7 +126,7 @@ function applyConfirmedAppearanceToModel(root: THREE.Object3D, profile: AvatarPr
     for (const material of materials) {
       const tintable = material as TintableMaterial;
       if (!tintable.color) continue;
-      const role = classifyAvatarMaterial(`${mesh.name} ${material.name ?? ''}`);
+      const role = classifyAvatarMaterial(material.name ?? '', mesh.name);
       if (!role) continue;
 
       const originalKey = 'zhixingOriginalColor';
