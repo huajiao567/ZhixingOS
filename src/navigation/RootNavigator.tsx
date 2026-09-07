@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useStore } from '../store/useStore';
 import { useEvidenceStore } from '../store/useEvidenceStore';
@@ -12,12 +12,14 @@ import { MirrorScreen } from '../screens/mirror/MirrorScreen';
 import { ProgressScreen } from '../screens/progress/ProgressScreen';
 import { SecretaryScreen } from '../screens/secretary/SecretaryScreen';
 import { WorkspaceScreen } from '../screens/workspace/WorkspaceScreen';
+import { DesktopHubScreen } from '../screens/desktop/DesktopHubScreen';
 import { SovereigntyScreen } from '../screens/sovereignty/SovereigntyScreen';
 import { OnboardingScreen } from '../screens/onboarding/OnboardingScreen';
 import { AuthScreen } from '../screens/auth/AuthScreen';
 import { DistillationReviewSheet, detectDistillationCandidates } from '../components/DistillationReviewSheet';
 import { useAppTheme } from '../theme/theme';
 import { MotiView } from 'moti';
+import { classifyFormFactor } from '../platform/formFactor';
 
 const Stack = createNativeStackNavigator();
 
@@ -109,6 +111,8 @@ function DistillationReviewSheetGlobal() {
 
 export function RootNavigator() {
   const theme = useAppTheme();
+  const { width } = useWindowDimensions();
+  const formFactor = classifyFormFactor({ width, platform: Platform.OS });
   const auth = useAuth();
   const hydrated = useStore((s) => s.hydrated);
   const hydrating = useStore((s) => s.hydrating);
@@ -159,11 +163,16 @@ export function RootNavigator() {
     <>
       <Suspense fallback={null}>
         <Stack.Navigator
+          initialRouteName={formFactor === 'desktop' ? 'DesktopHub' : 'MirrorHome'}
           screenOptions={{
             headerShown: false,
             contentStyle: { backgroundColor: theme.colors.bg },
           }}
         >
+        <Stack.Screen
+          name="DesktopHub"
+          component={DesktopHubScreen}
+        />
         <Stack.Screen
           name="MirrorHome"
           component={MirrorHome}
