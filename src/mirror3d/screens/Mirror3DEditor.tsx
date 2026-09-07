@@ -214,7 +214,7 @@ export function Mirror3DEditor() {
       evidenceTypes: ['editor_user_adjustment'],
     });
     if (diary.trim() && diary.trim() !== previousDiary.trim()) {
-      await useStore.getState().addJournal(diary.trim());
+      await useStore.getState().addJournal(diary.trim(), { sourceRef: 'avatar-editor', titlePrefix: '镜像记录' });
     }
     useStore.getState().pushAudit('用户', '确认三维镜像今日状态');
     setTab('mirror');
@@ -231,7 +231,7 @@ export function Mirror3DEditor() {
       '已应用：脸宽/脸长、体格/肩宽、肤色、发色与服装色。',
       '已保存待后续模型支持：眼睛、眼距、眉形、鼻子、嘴部等精细参数。',
       '来源：用户在三维镜像编辑器中明确确认。',
-    ].join('\n'));
+    ].join('\n'), { sourceRef: 'avatar-editor', titlePrefix: '孪生记录' });
     useStore.getState().pushAudit('用户', '确认三维数字孪生身份与外观版本');
     setPhotoHint('已保存到正式数字孪生，并写入新的身份版本。');
   };
