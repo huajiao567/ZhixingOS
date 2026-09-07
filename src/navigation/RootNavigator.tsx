@@ -20,6 +20,7 @@ import { DistillationReviewSheet, detectDistillationCandidates } from '../compon
 import { useAppTheme } from '../theme/theme';
 import { MotiView } from 'moti';
 import { classifyFormFactor } from '../platform/formFactor';
+import { DevicePresenceProvider } from '../components/DevicePresenceProvider';
 
 const Stack = createNativeStackNavigator();
 
@@ -160,7 +161,7 @@ export function RootNavigator() {
   if (!onboarded) return <OnboardingScreen />;
 
   return (
-    <>
+    <DevicePresenceProvider surface={formFactor}>
       <Suspense fallback={null}>
         <Stack.Navigator
           initialRouteName={formFactor === 'desktop' ? 'DesktopHub' : 'MirrorHome'}
@@ -207,7 +208,7 @@ export function RootNavigator() {
       </Stack.Navigator>
       </Suspense>
       <DistillationReviewSheetGlobal />
-    </>
+    </DevicePresenceProvider>
   );
 }
 
