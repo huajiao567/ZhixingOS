@@ -9,6 +9,10 @@ import {
   getLifeObjects,
   getTwinProfile,
   getContinuityHandoffs,
+  getDevices,
+  upsertDevice,
+  heartbeatDevice,
+  revokeDevice,
   createContinuityHandoff,
   consumeContinuityHandoff,
   cancelContinuityHandoff,
@@ -77,6 +81,15 @@ export const twinProfileSchema = z.object({
   evidence: z.array(z.record(z.string(), z.unknown())).max(5000),
   archivedTraits: z.array(z.record(z.string(), z.unknown())).max(2000),
   updatedAt: isoDate,
+});
+
+export const deviceRegistrationSchema = z.object({
+  id: z.string().min(8).max(200),
+  label: z.string().trim().min(1).max(120),
+  surface: z.enum(['desktop', 'mobile']),
+  platform: z.enum(['web', 'ios', 'android', 'windows', 'macos', 'linux', 'unknown']),
+  appVersion: z.string().trim().max(80).optional(),
+  capabilities: z.array(z.string().trim().min(1).max(80)).max(32),
 });
 
 export const continuityHandoffSchema = z.object({
@@ -178,6 +191,46 @@ runtimeRouter.post('/action-receipts/:id/undo', (req, res) => {
   if (!stored) { res.status(409).json({ error: '回执不存在或当前状态不可标记为已撤销' }); return; }
   audit(userId(req), 'action_receipt.undo', { id: stored.id });
   res.json(stored.doc);
+});
+
+runtimeRouter.get('/devices', (req, res) => {
+  res.json({ items: getDevices(userId(req), limit(req.query.limit, 50)), nextCursor: null });
+});
+
+runtimeRouter.post('/devices', (req, res) => {
+  const parsed = deviceRegistrationSchema.safeParse(req.body ?? {});
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? '参数错误' }); return; }
+  const body = parsed.data;
+  const stored = upsertDevice(userId(req), {
+    id: body.id,
+    label: body.label,
+    surface: body.surface,
+    platform: body.platform,
+    appVersion: body.appVersion,
+    capabilities: body.capabilities,
+    seenAt: new Date().toISOString(),
+  });
+  if (!stored) { res.status(409).json({ error: '设备 ID 已由其他账号占用' }); return; }
+  audit(userId(req), 'device.register', {
+    id: stored.id,
+    surface: stored.surface,
+    platform: stored.platform,
+    capabilityCount: stored.capabilities.length,
+  });
+  res.status(201).json(stored);
+});
+
+runtimeRouter.post('/devices/:id/heartbeat', (req, res) => {
+  const stored = heartbeatDevice(userId(req), req.params.id, new Date().toISOString());
+  if (!stored) { res.status(404).json({ error: '设备不存在或已撤销' }); return; }
+  res.json(stored);
+});
+
+runtimeRouter.post('/devices/:id/revoke', (req, res) => {
+  const stored = revokeDevice(userId(req), req.params.id, new Date().toISOString());
+  if (!stored) { res.status(404).json({ error: '设备不存在' }); return; }
+  audit(userId(req), 'device.revoke', { id: stored.id, surface: stored.surface });
+  res.json(stored);
 });
 
 runtimeRouter.get('/continuity-handoffs', (req, res) => {
