@@ -347,6 +347,30 @@ export const api = {
     api.del<{ ok: boolean; source: string; deletedCount: number; cascadedRecompute: number; deletedAt: string }>(
       `/api/data/evidence-by-source/${source}`,
     ),
+  continuity: {
+    list: (target: ContinuitySurface, limit = 20) =>
+      api.get<Paginated<ContinuityHandoff>>(
+        `/api/runtime/continuity-handoffs?target=${encodeURIComponent(target)}&limit=${limit}`,
+      ),
+    create: (body: {
+      id: string;
+      sourceSurface: ContinuitySurface;
+      targetSurface: ContinuitySurface;
+      title: string;
+      payload: ContinuityHandoffPayload;
+      createdAt: string;
+      expiresAt: string;
+    }) => api.send<ContinuityHandoff>(
+      'POST',
+      '/api/runtime/continuity-handoffs',
+      body,
+      `handoff:${body.id}`,
+    ),
+    consume: (id: string) =>
+      api.send<ContinuityHandoff>('POST', `/api/runtime/continuity-handoffs/${encodeURIComponent(id)}/consume`, {}, `handoff-consume:${id}`),
+    cancel: (id: string) =>
+      api.send<ContinuityHandoff>('POST', `/api/runtime/continuity-handoffs/${encodeURIComponent(id)}/cancel`, {}, `handoff-cancel:${id}`),
+  },
   brief: {
     weekly: () => api.get<WeeklyBriefResponse>('/api/brief/weekly'),
     monthly: () => api.get<MonthlyBriefResponse>('/api/brief/monthly'),
@@ -356,6 +380,30 @@ export const api = {
       api.get<AuditPage>(`/api/data/audit${buildQuery(params)}`),
   },
 };
+
+export type ContinuitySurface = 'desktop' | 'mobile';
+export type ContinuityHandoffStatus = 'open' | 'consumed' | 'cancelled';
+
+export interface ContinuityHandoffPayload {
+  kind: 'workspace_text' | 'life_object';
+  text?: string;
+  route?: 'Workspace' | 'Progress' | 'Mirror' | 'Secretary';
+  objectIds?: string[];
+}
+
+export interface ContinuityHandoff {
+  id: string;
+  user_id: string;
+  source_surface: ContinuitySurface;
+  target_surface: ContinuitySurface;
+  title: string;
+  payload: ContinuityHandoffPayload;
+  status: ContinuityHandoffStatus;
+  created_at: string;
+  expires_at: string;
+  consumed_at: string | null;
+  cancelled_at: string | null;
+}
 
 /** 周镜/月镜 LLM 响应：generatedBy 标识来源，其余字段由 LLM 动态生成 */
 export interface BriefResponse {
