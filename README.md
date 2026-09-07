@@ -13,7 +13,7 @@
 - 数据主权：来源授权、证据链、审计、导出、撤回、软删除级联重算与账号彻底删除。
 - 3D 数字人：保留 V0–V3 服务契约与完整动态 3D 默认模式，个人模型版本可形成阶段快照。
 - 生活数据扩展：统一保留 Health Connect/小米、手机使用、ActivityWatch、饮食照片与条码接口；已确认摘要可通过限幅、衰减和撤回门微调 3D 孪生。
-- 多端：Expo SDK 57 / React Native 0.86，支持 Android、iOS 与 Web；≥1100px Web 使用独立桌面工作台，窄屏与原生端保留手机伴侣界面；系统日历需开发构建或安装 APK。
+- 多端：Expo SDK 57 / React Native 0.86，支持 Android、iOS 与 Web；≥1100px Web 使用独立桌面工作台，窄屏与原生端保留手机伴侣界面；电脑↔手机可通过显式、用户隔离、24h 过期的 handoff 对象双向接力；系统日历需开发构建或安装 APK。
 
 ## 架构
 
@@ -27,6 +27,8 @@ ChangeReasoningKernel（时位势应变中）
 ContextSurface → ActionGateway → 真实执行器
               ↓
 ActionReceipt / Undo → EvidenceFeedback → TwinProfile
+              ↓
+ContinuityHandoff（电脑 ↔ 手机，显式/可取消/会过期）
 
 穿戴 / 手机 / 电脑 / 饮食
               ↓
@@ -103,7 +105,9 @@ npm run build:apk
 npm run check          # 前后端单测 + 严格类型检查
 npm run doctor         # Expo SDK 与原生依赖一致性
 npm run build:web      # 可部署 Web 构建
-npm run test:desktop   # 1440×960 桌面工作台功能测试\nnpm run test:mobile    # 390×844 移动视口功能测试
+npm run test:desktop   # 1440×960 桌面工作台功能测试
+npm run test:continuity # 电脑↔手机双浏览器显式接力测试
+npm run test:mobile    # 390×844 移动视口功能测试
 npm run audit:open-source
 ```
 
@@ -134,6 +138,7 @@ npm --prefix backend run build
 - `/api/runtime/life-objects`：生命对象读取、写入和按版本取消。
 - `/api/runtime/action-receipts`：幂等行动回执和撤销状态。
 - `/api/runtime/twin-profile`：版本化孪生档案。
+- `/api/runtime/continuity-handoffs`：用户隔离的电脑↔手机接力创建、查询、消费与取消。
 - `/api/secretary/chat`：带安全门控和个人上下文的秘书对话。
 - `/api/brief/*`：今日、周度与月度简报。
 
