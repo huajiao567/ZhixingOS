@@ -398,6 +398,28 @@ export interface TwinProfileRecord {
   updated_at: string;
 }
 
+export type ContinuitySurface = 'desktop' | 'mobile';
+export type ContinuityHandoffStatus = 'open' | 'consumed' | 'cancelled';
+
+export interface ContinuityHandoffRecord {
+  id: string;
+  user_id: string;
+  source_surface: ContinuitySurface;
+  target_surface: ContinuitySurface;
+  title: string;
+  payload: {
+    kind: 'workspace_text' | 'life_object';
+    text?: string;
+    route?: 'Workspace' | 'Progress' | 'Mirror' | 'Secretary';
+    objectIds?: string[];
+  };
+  status: ContinuityHandoffStatus;
+  created_at: string;
+  expires_at: string;
+  consumed_at: string | null;
+  cancelled_at: string | null;
+}
+
 // 请求体校验 schema（zod）在 routes 内定义
 export interface AuthedRequest extends Express.Request {
   userId?: string;
