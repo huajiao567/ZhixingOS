@@ -48,6 +48,9 @@ test.describe('电脑 ↔ 手机显式接力', () => {
     await expect(desktop.page.getByText('已发送到手机，24 小时内可继续', { exact: true })).toBeVisible();
 
     const mobile = await preparePage(browser, 'mobile', '10.91.0.12');
+    await expect(desktop.page.getByText('Web 手机', { exact: true })).toBeVisible({ timeout: 20_000 });
+    await expect(desktop.page.getByText(/2 台在线/)).toBeVisible({ timeout: 20_000 });
+
     const mobileContinue = mobile.page.getByRole('button', { name: '继续来自电脑的接力' });
     await expect(mobileContinue).toBeVisible({ timeout: 20_000 });
     await mobileContinue.click();
@@ -67,6 +70,12 @@ test.describe('电脑 ↔ 手机显式接力', () => {
     await expect(desktop.page.getByText('电脑端工作台', { exact: true })).toBeVisible();
     await desktop.page.getByRole('button', { name: '刷新跨端接力' }).click();
     await expect(desktop.page.getByRole('button', { name: '继续来自手机的接力' })).toHaveCount(0);
+
+    await desktop.page.getByRole('button', { name: '我的数据' }).click();
+    await desktop.page.getByRole('tab', { name: '切换到连接的数据标签' }).click();
+    await expect(desktop.page.getByRole('button', { name: '撤销设备：Web 手机' })).toBeVisible({ timeout: 20_000 });
+    await desktop.page.getByRole('button', { name: '撤销设备：Web 手机' }).click();
+    await expect(desktop.page.getByRole('button', { name: '撤销设备：Web 手机' })).toHaveCount(0);
 
     await mobile.context.close();
     await desktop.context.close();
