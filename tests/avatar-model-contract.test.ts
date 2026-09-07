@@ -118,7 +118,7 @@ test('production AvatarSample_G morph inventory supports expressions but has no 
     'production avatar must expose at least one morph/expression binding',
   );
   assert.ok(
-    blendGroupNames.some((name) => /blink|joy|angry|sorrow|fun|a|i|u|e|o/i.test(name)),
+    blendGroupNames.some((name) => /^(blink(?:_l|_r)?|joy|angry|sorrow|fun|a|i|u|e|o)$/i.test(name.trim())),
     `production avatar should expose expression-oriented BlendShape groups; found: ${blendGroupNames.join(', ')}`,
   );
 
