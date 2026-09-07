@@ -21,6 +21,7 @@ import { SatoriUnderstandingSection } from './sections/SatoriUnderstandingSectio
 import { AiModelSection } from './sections/AiModelSection';
 import { ConnectedDataSection } from './sections/ConnectedDataSection';
 import { ProactivitySection } from './sections/ProactivitySection';
+import { DevicePresencePanel } from '../../components/DevicePresencePanel';
 
 /**
  * SovereigntyScreen —— 数据主权页（V4.3 §2.1 / §12.4 / §12.5 / spec A26 / A35）
@@ -694,7 +695,11 @@ export function SovereigntyScreen() {
 
         {/* V4.3 Task 25.3 / 25.7：「连接的数据」子页 —— 数据源权限 + 撤回与删除分离 */}
         {tab === 'connected' && (
-          <ConnectedDataSection pushAudit={s.pushAudit} />
+          <View>
+            <DevicePresencePanel />
+            <View style={{ height: theme.spacing.md }} />
+            <ConnectedDataSection pushAudit={s.pushAudit} />
+          </View>
         )}
 
         {/* V4.3 Task 25.4：「主动性」子页 —— 通知/周镜/3D 程度（生活语言） */}
