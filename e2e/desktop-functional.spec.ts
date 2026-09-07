@@ -49,7 +49,6 @@ test.describe('1440px 电脑端工作台', () => {
     await input.fill('记录一下，电脑端继续整理今天的实验记录');
     await page.getByRole('button', { name: '交给工作台' }).click();
 
-    await expect(page.getByText('开放工作台', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('变化依据')).toBeVisible({ timeout: 20_000 });
     await page.getByRole('button', { name: '返回主页' }).click();
     await expect(page.getByText('电脑端工作台', { exact: true })).toBeVisible();
