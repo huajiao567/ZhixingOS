@@ -38,11 +38,23 @@ test('production AvatarSample_G exposes material names needed for safe runtime t
   for (const mesh of meshes) {
     for (const primitive of mesh.primitives ?? []) {
       const material = primitive.material === undefined ? undefined : materials[primitive.material];
-      const combined = [mesh.name, material?.name].filter(Boolean).join(' ');
+      const materialName = material?.name ?? '';
+      const meshName = mesh.name ?? '';
+      const combined = [meshName, materialName].filter(Boolean).join(' ');
       if (!combined) continue;
       inspected.push(combined);
-      const role = classifyAvatarMaterial(combined);
+      const role = classifyAvatarMaterial(materialName, meshName);
       if (role) roles.add(role);
+
+      if (/CLOTH/i.test(materialName)) {
+        assert.equal(role, 'outfit', `CLOTH material must override mesh fallback: ${combined}`);
+      }
+      if (/HAIR/i.test(materialName)) {
+        assert.equal(role, 'hair', `HAIR material must override mesh fallback: ${combined}`);
+      }
+      if (/SKIN/i.test(materialName)) {
+        assert.equal(role, 'skin', `SKIN material must override mesh fallback: ${combined}`);
+      }
     }
   }
 
