@@ -40,7 +40,7 @@ test.describe('1440px 电脑端工作台', () => {
 
     await expect(page.getByText(/DESKTOP WORKBENCH/)).toBeVisible();
     await expect(page.getByRole('button', { name: '开放工作台' })).toBeVisible();
-    await expect(page.getByRole('button', { name: '进程' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '进程', exact: true })).toBeVisible();
     await expect(page.getByText('跨端连续性 v1', { exact: true })).toBeVisible();
 
     const input = page.getByRole('textbox', { name: '桌面快速输入' });
