@@ -24,8 +24,7 @@ export function Mirror3DPanel({
   const [timelineVisible, setTimelineVisible] = useState(false);
 
   const stageTimeline = useMemo(
-    () => avatarProfile.timeline
-      .filter((entry) => entry.sourceModelVersionId)
+    () => [...avatarProfile.timeline]
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
     [avatarProfile.timeline],
   );
@@ -121,9 +120,16 @@ export function Mirror3DPanel({
               {stageTimeline.length === 0 ? (
                 <Text style={{ color: theme.colors.textTertiary, paddingVertical: theme.spacing.xl }}>还没有形成阶段版本。日常记录仍可正常使用。</Text>
               ) : stageTimeline.map((entry) => (
-                <View key={entry.sourceModelVersionId} style={{ borderTopWidth: 1, borderTopColor: theme.colors.borderSoft, paddingVertical: theme.spacing.md }}>
-                  <Text style={{ color: theme.colors.textPrimary, fontWeight: '800' }}>{entry.sourceModelVersion}</Text>
-                  <Text style={{ color: theme.colors.textTertiary, marginTop: 3 }}>{new Date(entry.createdAt).toLocaleDateString('zh-CN')}</Text>
+                <View key={`${entry.timelineVersion}-${entry.createdAt}`} style={{ borderTopWidth: 1, borderTopColor: theme.colors.borderSoft, paddingVertical: theme.spacing.md }}>
+                  <Text style={{ color: theme.colors.textPrimary, fontWeight: '800' }}>
+                    {entry.label || entry.sourceModelVersion || `版本 ${entry.timelineVersion}`}
+                  </Text>
+                  <Text style={{ color: theme.colors.textTertiary, marginTop: 3 }}>
+                    身份 {entry.identityVersion} · 外观 {entry.appearanceVersion} · {new Date(entry.createdAt).toLocaleDateString('zh-CN')}
+                  </Text>
+                  {entry.sourceModelVersion ? (
+                    <Text style={{ color: theme.colors.textTertiary, marginTop: 3 }}>个人模型：{entry.sourceModelVersion}</Text>
+                  ) : null}
                   {entry.note ? <Text style={{ color: theme.colors.textSecondary, lineHeight: 20, marginTop: 6 }}>{entry.note}</Text> : null}
                 </View>
               ))}
