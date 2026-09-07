@@ -167,6 +167,7 @@ jobs:
           cp .env.example .env.local
           cp backend/.env.example backend/.env
           sed -i 's/^JWT_SECRET=.*/JWT_SECRET=ci-only-secret-0123456789abcdef0123456789abcdef/' backend/.env
+          sed -i 's#^CORS_ORIGIN=.*#CORS_ORIGIN=http://localhost:8081#' backend/.env
 
       - name: Start backend and Expo web
         shell: bash
@@ -178,7 +179,7 @@ jobs:
           npx expo start --web --port 8081 > /tmp/zhixingos-web.log 2>&1 &
 
           for i in {1..90}; do
-            if curl -fsS http://127.0.0.1:8081 >/dev/null 2>&1; then
+            if curl -fsS http://127.0.0.1:3001/health >/dev/null 2>&1 && curl -fsS http://localhost:8081 >/dev/null 2>&1; then
               exit 0
             fi
             sleep 2
@@ -193,7 +194,7 @@ jobs:
 
       - name: Run mobile functional tests
         env:
-          WEB_BASE: http://127.0.0.1:8081
+          WEB_BASE: http://localhost:8081
         run: npm run test:mobile
 
       - name: Upload E2E diagnostics
