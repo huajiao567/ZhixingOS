@@ -20,13 +20,14 @@ import { DistillationReviewSheet, detectDistillationCandidates } from '../compon
 import { useAppTheme } from '../theme/theme';
 import { MotiView } from 'moti';
 import { classifyFormFactor } from '../platform/formFactor';
+import { loadMirror3DEditor } from '../mirror3d/screens/loadMirror3DEditor';
 
 const Stack = createNativeStackNavigator();
 
 // 编辑器屏连同其 three/@react-three 依赖延迟求值：不进入首屏启动包
 // （同 AvatarCanvasFlagged 的 3D 懒加载策略）。
 const Mirror3DEditor = React.lazy(() =>
-  import('../mirror3d/screens/Mirror3DEditor').then((m) => ({ default: m.Mirror3DEditor })),
+  loadMirror3DEditor().then((m) => ({ default: m.Mirror3DEditor })),
 );
 
 function Splash({ hint }: { hint: string }) {
