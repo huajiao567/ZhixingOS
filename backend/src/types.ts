@@ -398,6 +398,22 @@ export interface TwinProfileRecord {
   updated_at: string;
 }
 
+export type DeviceSurface = 'desktop' | 'mobile';
+export type DevicePlatform = 'web' | 'ios' | 'android' | 'windows' | 'macos' | 'linux' | 'unknown';
+
+export interface DeviceRecord {
+  id: string;
+  user_id: string;
+  label: string;
+  surface: DeviceSurface;
+  platform: DevicePlatform;
+  app_version: string | null;
+  capabilities: string[];
+  created_at: string;
+  last_seen_at: string;
+  revoked_at: string | null;
+}
+
 export type ContinuitySurface = 'desktop' | 'mobile';
 export type ContinuityHandoffStatus = 'open' | 'consumed' | 'cancelled';
 
