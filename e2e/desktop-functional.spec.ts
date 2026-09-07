@@ -53,7 +53,7 @@ test.describe('1440px 电脑端工作台', () => {
     await page.getByRole('button', { name: '返回主页' }).click();
     await expect(page.getByText('电脑端工作台', { exact: true })).toBeVisible();
 
-    await page.getByRole('button', { name: '进程' }).click();
+    await page.getByRole('button', { name: '进程', exact: true }).click();
     await expect(page.getByText('进程', { exact: true }).first()).toBeVisible();
   });
 });
