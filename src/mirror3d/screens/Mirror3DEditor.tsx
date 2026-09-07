@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,19 +13,24 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Slider from '@react-native-community/slider';
-import { AvatarCanvas } from '../avatar/AvatarCanvas';
+import { AvatarCanvasFlagged } from '../avatar/AvatarCanvasFlagged';
 import {
   extractPhotoFitting,
   fitIdentityFromBodyMetrics,
   fitIdentityFromFaceMetrics,
 } from '../avatar/photoFitting';
 import { useMirror3DStore } from '../store/useMirror3DStore';
-import type { AvatarIdentity, HairStyle } from '../types/avatar';
+import type { AvatarIdentity } from '../types/avatar';
 import { useStore } from '../../store/useStore';
 import { useAppTheme } from '../../theme/theme';
 import { ThemeSelector } from '../../components/ThemeSelector';
 import { StateExplainer } from '../avatar/StateExplainer';
 import { deleteTemporaryPhotoCopy, pickPhoto } from '../../services/mediaCapture';
+import { useAvatarV2Store } from '../store/useAvatarV2Store';
+import {
+  personalizationDraftToProfile,
+  type AvatarPersonalizationDraft,
+} from '../avatar/v2/avatarPersonalization';
 
 type Tab = 'mirror' | 'state' | 'identity' | 'data';
 
@@ -114,6 +119,10 @@ export function Mirror3DEditor() {
   const feedback = useMirror3DStore((s) => s.feedback);
   const loadScenario = useMirror3DStore((s) => s.loadScenario);
   const resetAll = useMirror3DStore((s) => s.resetAll);
+  const v2Profile = useAvatarV2Store((s) => s.profile);
+  const confirmPersonalization = useAvatarV2Store((s) => s.confirmPersonalization);
+  const correctDailyState = useAvatarV2Store((s) => s.correctDailyState);
+  const draftInitializedRef = useRef(false);
 
   const [fbActive, setFbActive] = useState<string | null>(null);
   const [scActive, setScActive] = useState<string | null>(null);
@@ -124,6 +133,61 @@ export function Mirror3DEditor() {
   useEffect(() => {
     recompute();
   }, [recompute]);
+
+  // 编辑器首次进入时从当前生产 V2 档案初始化草稿，避免旧 Demo store 覆盖真实数字孪生。
+  useEffect(() => {
+    if (draftInitializedRef.current) return;
+    draftInitializedRef.current = true;
+    const face = v2Profile.identity.faceMorphs ?? {};
+    const body = v2Profile.identity.bodyMorphs ?? {};
+    updateIdentity({
+      faceWidth: face.faceWidth ?? 0.5,
+      faceHeight: face.faceHeight ?? 0.5,
+      jawRoundness: face.jawRoundness ?? 0.5,
+      eyeSize: face.eyeSize ?? 0.5,
+      eyeSpacing: face.eyeSpacing ?? 0.5,
+      browAngle: face.browAngle ?? 0.5,
+      noseSize: face.noseSize ?? 0.5,
+      mouthWidth: face.mouthWidth ?? 0.5,
+      bodyScale: body.bodyScale ?? 0.5,
+      shoulderWidth: body.shoulderWidth ?? 0.5,
+      skinTone: v2Profile.identity.skinMaterial.baseColor,
+      hairColor: v2Profile.appearance.hairColor ?? '#2A2028',
+      shirtColor: v2Profile.appearance.outfitColor ?? '#536BE8',
+    });
+  }, [updateIdentity, v2Profile]);
+
+  const personalizationDraft = useMemo<AvatarPersonalizationDraft>(() => ({
+    faceWidth: identity.faceWidth,
+    faceHeight: identity.faceHeight,
+    jawRoundness: identity.jawRoundness,
+    eyeSize: identity.eyeSize,
+    eyeSpacing: identity.eyeSpacing,
+    browAngle: identity.browAngle,
+    noseSize: identity.noseSize,
+    mouthWidth: identity.mouthWidth,
+    bodyScale: identity.bodyScale,
+    shoulderWidth: identity.shoulderWidth,
+    skinTone: identity.skinTone,
+    hairColor: identity.hairColor,
+    outfitColor: identity.shirtColor,
+  }), [identity]);
+
+  const previewProfile = useMemo(() => {
+    const personalized = personalizationDraftToProfile(v2Profile, personalizationDraft);
+    return {
+      ...personalized,
+      dailyState: {
+        ...personalized.dailyState,
+        energy: snapshot.state.energy,
+        tension: snapshot.state.stress,
+        focus: snapshot.state.focus,
+        socialOpenness: snapshot.state.sociality,
+        evidenceTypes: ['editor_preview'],
+        userOverridden: true,
+      },
+    };
+  }, [v2Profile, personalizationDraft, snapshot.state]);
 
   const handleFeedback = (kind: 'accurate' | 'tooTired' | 'tooHappy' | 'tooSlouched') => {
     feedback(kind);
@@ -137,10 +201,39 @@ export function Mirror3DEditor() {
     useStore.getState().pushAudit('用户', `校正三维镜像：${label[kind]}`);
   };
 
-  const apply = () => {
+  const apply = async () => {
+    const previousDiary = signals.diary;
     updateSignals({ diary });
     recompute();
+    const nextState = useMirror3DStore.getState().snapshot.state;
+    correctDailyState({
+      energy: nextState.energy,
+      tension: nextState.stress,
+      focus: nextState.focus,
+      socialOpenness: nextState.sociality,
+      evidenceTypes: ['editor_user_adjustment'],
+    });
+    if (diary.trim() && diary.trim() !== previousDiary.trim()) {
+      await useStore.getState().addJournal(diary.trim());
+    }
+    useStore.getState().pushAudit('用户', '确认三维镜像今日状态');
     setTab('mirror');
+  };
+
+  const savePersonalization = async () => {
+    confirmPersonalization(
+      personalizationDraft,
+      '确认我的三维形象',
+      '来自三维镜像编辑器；照片拟合仅在本地生成草稿，保存动作由用户明确触发。',
+    );
+    await useStore.getState().addJournal([
+      '[孪生] 用户确认更新三维形象',
+      '已应用：脸宽/脸长、体格/肩宽、肤色、发色与服装色。',
+      '已保存待后续模型支持：眼睛、眼距、眉形、鼻子、嘴部等精细参数。',
+      '来源：用户在三维镜像编辑器中明确确认。',
+    ].join('\n'));
+    useStore.getState().pushAudit('用户', '确认三维数字孪生身份与外观版本');
+    setPhotoHint('已保存到正式数字孪生，并写入新的身份版本。');
   };
 
   const reset = () => {
@@ -183,16 +276,8 @@ export function Mirror3DEditor() {
       }
       setPhotoHint(`已根据照片调整${parts.join('与')}，你可以继续微调。`);
 
-      // 联动：把这次形象更新写入记忆流，秘书与孪生档案可追溯此事件
-      try {
-        await useStore.getState().addJournal([
-          '[孪生] 已根据照片更新形象参数',
-          `来源：本地照片拟合（不上传像素）· 调整项：${parts.join('、') || '无'}`,
-          body ? `体格测量完整性：肩=${body.completeness.shoulders ? '可见' : '不可见'}，髋=${body.completeness.hips ? '可见' : '不可见'}，全身=${body.completeness.fullBody ? '可见' : '不可见'}` : '',
-        ].filter(Boolean).join('\n'));
-      } catch (err) {
-        console.warn('[Mirror3DEditor] 形象更新事件写入失败:', err);
-      }
+      // 照片结果先只形成本地草稿；只有用户点击“保存到我的数字孪生”才进入正式身份版本。
+      useStore.getState().pushAudit('用户', `本地照片生成三维形象草稿：${parts.join('、') || '无'}`);
     } catch (err) {
       console.warn('[Mirror3DEditor] 从照片拟合失败:', err);
       setPhotoHint(err instanceof Error ? err.message : '处理照片时出错，请稍后再试。');
@@ -319,10 +404,10 @@ export function Mirror3DEditor() {
           </View>
 
           <View style={{ height: 340, borderRadius: theme.radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: D.border, backgroundColor: D.surface }}>
-            <AvatarCanvas identity={identity} render={snapshot.render} paused={false} />
+            <AvatarCanvasFlagged profile={previewProfile} paused={false} fill />
             <View style={{ position: 'absolute', top: theme.spacing.sm, left: theme.spacing.sm, backgroundColor: theme.dark ? 'rgba(10,14,22,0.78)' : 'rgba(255,255,255,0.85)', borderRadius: theme.radius.md, paddingHorizontal: 11, paddingVertical: 8 }}>
               <Text style={{ color: D.textPrimary, fontWeight: '700', fontSize: theme.font.small }}>{snapshot.render.animation === 'idle' ? '平静' : snapshot.render.animation === 'active' ? '活跃' : snapshot.render.animation === 'focused' ? '专注' : '疲惫'}</Text>
-              <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, marginTop: 2 }}>{shirtName(identity.shirtColor)} · {HAIR_LABEL[identity.hairStyle]} · {theme.name}</Text>
+              <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, marginTop: 2 }}>V2 · 身份 {v2Profile.identity.identityVersion} · {theme.name}</Text>
             </View>
             <View style={{ position: 'absolute', top: theme.spacing.sm, right: theme.spacing.sm, flexDirection: 'row', backgroundColor: theme.dark ? 'rgba(10,14,22,0.7)' : 'rgba(255,255,255,0.8)', borderRadius: theme.radius.full, padding: 4, borderWidth: 1, borderColor: D.border }}>
               <Pressable
@@ -446,8 +531,8 @@ export function Mirror3DEditor() {
               </Section>
 
               <Pressable
-                onPress={apply}
-                accessibilityLabel="重新生成今日镜像"
+                onPress={() => { void apply(); }}
+                accessibilityLabel="重新生成今日镜像并保存记录"
                 accessibilityRole="button"
                 style={({ pressed }) => ({ backgroundColor: D.primary, borderRadius: theme.radius.md, paddingVertical: theme.spacing.md, alignItems: 'center', marginBottom: theme.spacing.md, opacity: pressed ? 0.85 : 1 })}
               >
@@ -516,14 +601,7 @@ export function Mirror3DEditor() {
                 ))}
               </Section>
 
-              <Section title="发型与颜色">
-                <Text style={{ color: D.textSecondary, marginBottom: theme.spacing.sm, fontSize: theme.font.small }}>发型</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-                  {(Object.keys(HAIR_LABEL) as HairStyle[]).map((h) => (
-                    <Chip key={h} label={HAIR_LABEL[h]} active={identity.hairStyle === h} onPress={() => updateIdentity({ hairStyle: h })} />
-                  ))}
-                </View>
-
+              <Section title="正式形象颜色">
                 <Text style={{ color: D.textSecondary, marginVertical: theme.spacing.sm, fontSize: theme.font.small }}>肤色</Text>
                 <View style={{ flexDirection: 'row', marginBottom: 4 }}>
                   {SKIN_TONES.map((c) => (
@@ -567,9 +645,30 @@ export function Mirror3DEditor() {
                 </View>
 
                 <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, lineHeight: 18, marginTop: theme.spacing.md }}>
-                  当前 Demo 用参数化几何体在设备内直接生成；Web 端已支持「从照片」自动提取脸型、五官与肩宽/头身比等体格参数，照片不会离开本设备。
+                  当前页面直接预览正式 V2 VRM。已真实应用脸宽/脸长、体格/肩宽与肤色/发色/服装色；眼睛、眼距、眉形、鼻子和嘴部等参数会随身份版本保存，但当前生产模型缺少对应 morph，不会伪装成已生效。
                 </Text>
               </Section>
+
+              <Pressable
+                onPress={() => { void savePersonalization(); }}
+                accessibilityLabel="保存到我的数字孪生"
+                accessibilityRole="button"
+                style={({ pressed }) => ({
+                  backgroundColor: D.primary,
+                  borderRadius: theme.radius.md,
+                  minHeight: theme.touch.minTarget,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingHorizontal: theme.spacing.md,
+                  marginBottom: theme.spacing.md,
+                  opacity: pressed ? 0.82 : 1,
+                })}
+              >
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: theme.font.body }}>保存到我的数字孪生</Text>
+              </Pressable>
+              <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, lineHeight: 18, marginBottom: theme.spacing.md }}>
+                滑杆和照片分析都只是预览草稿；只有点击这里才会生成新的身份/外观版本并进入时间线。
+              </Text>
             </>
           )}
 
