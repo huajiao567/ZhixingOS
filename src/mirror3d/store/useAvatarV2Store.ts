@@ -25,6 +25,11 @@ import {
 import { expireAdaptiveAppearance } from '../avatar/v2/adaptiveAppearance';
 import type { PersonalModelVersion } from '../../types/models';
 import { syncModelVersionsToAvatarTimeline } from '../avatar/avatarTimeline';
+import {
+  nextIdentityVersion,
+  personalizationDraftToProfile,
+  type AvatarPersonalizationDraft,
+} from '../avatar/v2/avatarPersonalization';
 
 const LEGACY_STORAGE_KEY = 'satori_avatar_v2_profile';
 let activeStorageKey: string | null = null;
@@ -51,6 +56,8 @@ interface AvatarV2State {
   tickExpiry: () => void;
   /** 用户确认的外观修改（先预览后确认；递增外观版本并写时间线） */
   confirmAppearance: (next: Partial<AvatarAppearance>, label: string, note?: string) => void;
+  /** 将编辑器中的脸型/体格/肤色/发色/服装色作为一个明确确认的数字孪生版本保存。 */
+  confirmPersonalization: (draft: AvatarPersonalizationDraft, label: string, note?: string) => void;
   /** 保存「此时的我」到时间线 */
   saveTimelineSnapshot: (label: string, note?: string) => void;
   /** 将个人模型版本幂等同步为阶段快照，不读取原始弱证据。 */
@@ -86,6 +93,11 @@ export const useAvatarV2Store = create<AvatarV2State>((set, get) => ({
         if (!parsed.growthTraits) {
           parsed.growthTraits = { ...NEUTRAL_GROWTH_TRAITS, updatedAt: new Date().toISOString() };
         }
+        parsed.appearance = {
+          ...parsed.appearance,
+          hairColor: parsed.appearance?.hairColor ?? '#2A2028',
+          outfitColor: parsed.appearance?.outfitColor ?? '#536BE8',
+        };
         if (!parsed.adaptiveAppearance) {
           parsed.adaptiveAppearance = {
             ...NEUTRAL_ADAPTIVE_APPEARANCE,
@@ -186,6 +198,43 @@ export const useAvatarV2Store = create<AvatarV2State>((set, get) => ({
     const next: AvatarProfileV2 = {
       ...profile,
       appearance,
+      timeline: [...profile.timeline, entry],
+    };
+    set({ profile: next });
+    persist(next);
+  },
+
+  confirmPersonalization: (draft, label, note) => {
+    const { profile } = get();
+    const now = new Date().toISOString();
+    const personalized = personalizationDraftToProfile(profile, draft);
+    const identityVersion = nextIdentityVersion(profile.identity.identityVersion);
+    const appearanceVersion = profile.appearance.appearanceVersion + 1;
+    const entry: AvatarTimelineEntry = {
+      timelineVersion: profile.timeline.length + 1,
+      kind: 'identity_change',
+      label,
+      identityVersion,
+      appearanceVersion,
+      snapshot: {
+        characterId: personalized.appearance.characterId,
+        paletteId: personalized.appearance.paletteId,
+        behavior: { ...profile.behaviorStyle },
+      },
+      createdAt: now,
+      note,
+    };
+    const next: AvatarProfileV2 = {
+      ...personalized,
+      identity: {
+        ...personalized.identity,
+        identityVersion,
+        confirmedAt: now,
+      },
+      appearance: {
+        ...personalized.appearance,
+        appearanceVersion,
+      },
       timeline: [...profile.timeline, entry],
     };
     set({ profile: next });
