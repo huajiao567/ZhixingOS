@@ -85,6 +85,9 @@ test.describe('390x844 手机界面功能冒烟', () => {
     );
     await page.getByRole('tab', { name: /切换到捏脸标签/ }).click();
     await expect(page.getByText(/当前页面直接预览正式 V2 VRM/)).toBeVisible();
+    await expect(page.getByText('预览生效', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('当前仅保存', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(/肩宽走肩骨\/上臂根节点/)).toBeVisible();
     await page.getByRole('button', { name: /服装色青碧/ }).click();
     await page.getByRole('button', { name: '保存到我的数字孪生' }).click();
     await expect(page.getByText(/已保存到正式数字孪生/)).toBeVisible({ timeout: 20_000 });
