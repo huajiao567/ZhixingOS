@@ -627,6 +627,8 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
   const initialRotationsRef = useRef<Map<THREE.Bone, THREE.Euler>>(new Map());
   const initialScalesRef = useRef<Map<THREE.Bone, THREE.Vector3>>(new Map());
   const initialPositionsRef = useRef<Map<THREE.Bone, THREE.Vector3>>(new Map());
+  const appearanceProbeRef = useRef<AvatarRuntimeProbe['appearance']>({});
+  const lastRuntimeProbeAtRef = useRef(0);
   /** 眼下疲劳是独立、可移除的临时材质层，不修改基础模型纹理。 */
   const fatigueOverlayRef = useRef<THREE.Group | null>(null);
   const fatigueMaterialsRef = useRef<THREE.MeshBasicMaterial[]>([]);
@@ -760,7 +762,7 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
           }
         });
 
-        applyConfirmedAppearanceToModel(scene, profile);
+        appearanceProbeRef.current = applyConfirmedAppearanceToModel(scene, profile);
 
         const blendMeshes = findBlendShapeMeshes(scene);
         blendMeshesRef.current = blendMeshes;
@@ -963,7 +965,7 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
   // 每次都从首次缓存的原始材质颜色重新混合，避免热更新或多次保存造成颜色累积漂移。
   useEffect(() => {
     if (!model) return;
-    applyConfirmedAppearanceToModel(model, profile);
+    appearanceProbeRef.current = applyConfirmedAppearanceToModel(model, profile);
   }, [
     model,
     profile.identity.skinMaterial.baseColor,
@@ -1536,7 +1538,18 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
       const init = initialRots.get(head)!;
       head.rotation.y = init.y + swayAmount + touchTilt;
       head.rotation.x = init.x + nodAmount - spineAdjust * 0.2 + touchNod + ackNod;
-      head.scale.setScalar(touchScale);
+
+      // 自然动作只能在已确认身份几何上做临时微扰，不能用 setScalar()
+      // 抹掉同一帧前面已经应用的脸宽/脸长。这里重新从不可变基线计算最终尺度。
+      const baseScale = initialScalesRef.current.get(head);
+      if (baseScale) {
+        const compensated = deriveCompensatedHeadLocalScale(identityGeometry, groupRef.current.scale);
+        head.scale.set(
+          baseScale.x * compensated.x * touchScale,
+          baseScale.y * compensated.y * touchScale,
+          baseScale.z * compensated.z * touchScale,
+        );
+      }
     } else if (neck && initialRots.has(neck)) {
       const init = initialRots.get(neck)!;
       neck.rotation.y = init.y + (swayAmount + touchTilt) * 0.7;
@@ -1552,6 +1565,64 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
     if (spine && initialRots.has(spine)) {
       const init = initialRots.get(spine)!;
       spine.rotation.x = init.x + breathAmount * breathDepth * 0.3 - (spineAdjust + ackSpineRelax) * 0.6;
+    }
+
+    // 浏览器诊断只报告 renderer 已经实际应用后的 Three.js 世界变换与材质结果。
+    // Playwright 用它证明“控件值变化”确实穿过正式 VRM 渲染链，而不是只改 store/UI。
+    const now = performance.now();
+    if (now - lastRuntimeProbeAtRef.current >= 80) {
+      lastRuntimeProbeAtRef.current = now;
+      groupRef.current.updateMatrixWorld(true);
+      model.updateMatrixWorld(true);
+
+      const headLocalScale = head ? head.scale : null;
+      const headWorldScale = head ? head.getWorldScale(new THREE.Vector3()) : null;
+      const activeShoulderRoots = [leftShoulder ?? leftUpperArm, rightShoulder ?? rightUpperArm].filter(
+        (bone): bone is THREE.Bone => Boolean(bone),
+      );
+      let shoulderWorldDistance: number | undefined;
+      if (activeShoulderRoots.length === 2) {
+        const left = activeShoulderRoots[0].getWorldPosition(new THREE.Vector3());
+        const right = activeShoulderRoots[1].getWorldPosition(new THREE.Vector3());
+        shoulderWorldDistance = left.distanceTo(right);
+      }
+      const face = profile.identity.faceMorphs ?? {};
+      const body = profile.identity.bodyMorphs ?? {};
+      reportAvatarRuntimeProbe({
+        updatedAt: Date.now(),
+        identity: {
+          faceWidth: face.faceWidth ?? 0.5,
+          faceHeight: face.faceHeight ?? 0.5,
+          jawRoundness: face.jawRoundness ?? 0.5,
+          eyeSize: face.eyeSize ?? 0.5,
+          eyeSpacing: face.eyeSpacing ?? 0.5,
+          browAngle: face.browAngle ?? 0.5,
+          noseSize: face.noseSize ?? 0.5,
+          mouthWidth: face.mouthWidth ?? 0.5,
+          bodyScale: body.bodyScale ?? 0.5,
+          shoulderWidth: body.shoulderWidth ?? 0.5,
+        },
+        geometry: {
+          groupScale: {
+            x: groupRef.current.scale.x,
+            y: groupRef.current.scale.y,
+            z: groupRef.current.scale.z,
+          },
+          headLocalScale: headLocalScale ? {
+            x: headLocalScale.x,
+            y: headLocalScale.y,
+            z: headLocalScale.z,
+          } : undefined,
+          headWorldScale: headWorldScale ? {
+            x: headWorldScale.x,
+            y: headWorldScale.y,
+            z: headWorldScale.z,
+          } : undefined,
+          shoulderRootNames: activeShoulderRoots.map((bone) => bone.name),
+          shoulderWorldDistance,
+        },
+        appearance: appearanceProbeRef.current,
+      });
     }
   });
 
