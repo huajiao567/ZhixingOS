@@ -13,7 +13,7 @@
 - 数据主权：来源授权、证据链、审计、导出、撤回、软删除级联重算与账号彻底删除。
 - 3D 数字人：保留 V0–V3 服务契约与完整动态 3D 默认模式，个人模型版本可形成阶段快照。
 - 生活数据扩展：统一保留 Health Connect/小米、手机使用、ActivityWatch、饮食照片与条码接口；已确认摘要可通过限幅、衰减和撤回门微调 3D 孪生。
-- 多端：Expo SDK 57 / React Native 0.86，支持 Android、iOS 与 Web；系统日历需开发构建或安装 APK。
+- 多端：Expo SDK 57 / React Native 0.86，支持 Android、iOS 与 Web；≥1100px Web 使用独立桌面工作台，窄屏与原生端保留手机伴侣界面；系统日历需开发构建或安装 APK。
 
 ## 架构
 
@@ -103,7 +103,7 @@ npm run build:apk
 npm run check          # 前后端单测 + 严格类型检查
 npm run doctor         # Expo SDK 与原生依赖一致性
 npm run build:web      # 可部署 Web 构建
-npm run test:mobile    # 390×844 移动视口功能测试
+npm run test:desktop   # 1440×960 桌面工作台功能测试\nnpm run test:mobile    # 390×844 移动视口功能测试
 npm run audit:open-source
 ```
 
