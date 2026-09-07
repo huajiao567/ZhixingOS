@@ -11,6 +11,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { Glyph } from '../../components/glyphs';
 import { ContinuityInboxCard } from '../../components/ContinuityInboxCard';
+import { DevicePresencePanel } from '../../components/DevicePresencePanel';
 import { sendWorkspaceHandoff } from '../../hooks/useContinuityHandoffs';
 import { useStore } from '../../store/useStore';
 import { useAppTheme } from '../../theme/theme';
@@ -293,6 +294,9 @@ export function DesktopHubScreen() {
                   );
                 }}
               />
+              <View style={{ marginTop: 14 }}>
+                <DevicePresencePanel compact />
+              </View>
               <View style={[styles.metricRow, { borderColor: theme.colors.borderSoft, marginTop: 12 }]}>
                 <Text style={{ color: theme.colors.textTertiary }}>待同步</Text>
                 <Text style={{ color: theme.colors.textPrimary, fontWeight: '800' }}>{sync.pending}</Text>
