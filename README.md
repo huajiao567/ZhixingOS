@@ -48,7 +48,7 @@ AdaptiveAppearance → VRM 临时材质 / 表情 / 骨骼
 
 ## 快速开始
 
-要求：Node.js 22.5+。原生 Android 构建还需要 JDK 17；本仓库的构建脚本可直接使用 `.toolchains/gradle-9.3.1-bin.zip`，该工具链不会进入 Git。
+要求：Node.js 22.13+（Expo SDK 57 最低要求）。原生 Android 构建还需要 JDK 17；本仓库的构建脚本可直接使用 `.toolchains/gradle-9.3.1-bin.zip`，该工具链不会进入 Git。
 
 ```powershell
 git clone <your-repository-url>
