@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Glyph } from '../../components/glyphs';
+import { ContinuityInboxCard } from '../../components/ContinuityInboxCard';
+import { sendWorkspaceHandoff } from '../../hooks/useContinuityHandoffs';
 import { useStore } from '../../store/useStore';
 import { useAppTheme } from '../../theme/theme';
 
@@ -35,6 +37,8 @@ export function DesktopHubScreen() {
   const navigation = useNavigation<any>();
   const inputRef = useRef<TextInput>(null);
   const [command, setCommand] = useState('');
+  const [handoffBusy, setHandoffBusy] = useState(false);
+  const [handoffMessage, setHandoffMessage] = useState<string | null>(null);
   const user = useStore((s) => s.user);
   const events = useStore((s) => s.events);
   const commitments = useStore((s) => s.commitments);
@@ -87,6 +91,22 @@ export function DesktopHubScreen() {
     if (!text) return;
     setCommand('');
     navigation.navigate('Workspace', { initialText: text });
+  };
+
+  const sendToMobile = async () => {
+    const text = command.trim();
+    if (!text || handoffBusy) return;
+    setHandoffBusy(true);
+    setHandoffMessage(null);
+    try {
+      await sendWorkspaceHandoff('desktop', 'mobile', text, `电脑继续：${text.slice(0, 48)}`);
+      setCommand('');
+      setHandoffMessage('已发送到手机，24 小时内可继续');
+    } catch (error) {
+      setHandoffMessage(error instanceof Error ? error.message : '发送到手机失败');
+    } finally {
+      setHandoffBusy(false);
+    }
   };
 
   const greeting = user.name && user.name !== '我' ? `${user.name}，这是你的电脑工作台` : '这是你的电脑工作台';
@@ -168,6 +188,19 @@ export function DesktopHubScreen() {
             />
             <Text style={[styles.commandHint, { color: theme.colors.textTertiary }]}>Ctrl/Cmd + K 聚焦 · 所有动作仍经过解释、确认与回执</Text>
           </View>
+          <View style={styles.commandActions}>
+            <Pressable
+              onPress={sendToMobile}
+              disabled={!command.trim() || handoffBusy}
+              accessibilityRole="button"
+              accessibilityLabel="发送到手机继续"
+              style={[styles.commandButton, { backgroundColor: theme.colors.surfaceAlt, opacity: handoffBusy ? 0.5 : 1 }]}
+            >
+              <Glyph name="layers" size={17} color={command.trim() ? theme.colors.primary : theme.colors.textTertiary} />
+              <Text style={{ color: command.trim() ? theme.colors.textSecondary : theme.colors.textTertiary, fontWeight: '700' }}>
+                {handoffBusy ? '发送中…' : '到手机'}
+              </Text>
+            </Pressable>
           <Pressable
             onPress={handToWorkspace}
             disabled={!command.trim()}
@@ -178,7 +211,13 @@ export function DesktopHubScreen() {
             <Text style={{ color: command.trim() ? theme.colors.textInverse : theme.colors.textTertiary, fontWeight: '700' }}>交给工作台</Text>
             <Glyph name="arrow" size={17} color={command.trim() ? theme.colors.textInverse : theme.colors.textTertiary} />
           </Pressable>
+          </View>
         </View>
+        {handoffMessage ? (
+          <View style={[styles.handoffNotice, { borderColor: theme.colors.borderSoft, backgroundColor: theme.colors.surfaceAlt }]}>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>{handoffMessage}</Text>
+          </View>
+        ) : null}
 
         <View style={styles.grid}>
           <View style={styles.mainColumn}>
@@ -243,9 +282,18 @@ export function DesktopHubScreen() {
               <Text style={[styles.sectionLabel, { color: theme.colors.textTertiary }]}>CONTINUITY</Text>
               <Text style={[styles.panelTitle, { color: theme.colors.textPrimary }]}>跨端连续性 v1</Text>
               <Text style={[styles.panelCopy, { color: theme.colors.textSecondary }]}>
-                当前连续性来自同一后端中的对象、证据与回执，而不是靠界面复制。手机产生的记录重新同步后，会进入这里的同一记忆层。
+                接力是显式、可取消、会过期的对象；不会把共享数据库冒充成系统级剪贴板。
               </Text>
-              <View style={[styles.metricRow, { borderColor: theme.colors.borderSoft }]}>
+              <ContinuityInboxCard
+                target="desktop"
+                onContinue={(handoff) => {
+                  navigation.navigate(
+                    handoff.payload.route ?? 'Workspace',
+                    handoff.payload.text ? { initialText: handoff.payload.text } : undefined,
+                  );
+                }}
+              />
+              <View style={[styles.metricRow, { borderColor: theme.colors.borderSoft, marginTop: 12 }]}>
                 <Text style={{ color: theme.colors.textTertiary }}>待同步</Text>
                 <Text style={{ color: theme.colors.textPrimary, fontWeight: '800' }}>{sync.pending}</Text>
               </View>
@@ -310,7 +358,9 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 1.4, marginBottom: 5 },
   commandInput: { fontSize: 18, lineHeight: 26, paddingVertical: 2, outlineStyle: 'none' as any },
   commandHint: { fontSize: 10, marginTop: 6 },
+  commandActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   commandButton: { height: 46, paddingHorizontal: 16, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  handoffNotice: { borderWidth: 1, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginTop: -12, marginBottom: 18 },
   grid: { flexDirection: 'row', gap: 22, alignItems: 'flex-start' },
   mainColumn: { flex: 1.75, gap: 22, minWidth: 0 },
   sideColumn: { flex: 0.85, gap: 22, minWidth: 300 },
