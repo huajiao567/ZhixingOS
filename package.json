@@ -11,7 +11,7 @@
     "local-first"
   ],
   "engines": {
-    "node": ">=22.5"
+    "node": ">=22.16"
   },
   "overrides": {
     "metro": "0.84.5",

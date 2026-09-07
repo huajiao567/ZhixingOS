@@ -336,13 +336,17 @@ export function recallPersonalMemory(data: MemoryContextData, options: MemoryRec
     return { ...candidate, score };
   }).sort((a, b) => b.score - a.score || b.asset.createdAt.localeCompare(a.asset.createdAt));
 
+  // Candidate construction can incur one-time Unicode/locale initialization costs that vary by OS.
+  // Apply the soft timeout to the actual selection phase so identical inputs do not recall zero
+  // assets on slower runners before the first candidate is even considered.
+  const selectionStarted = Date.now();
   const selected = emptySelected();
   const selectedCandidates: Array<Candidate & { score: number; boundedContent: string }> = [];
   let totalChars = 0;
   let reason: MemoryRecallReceipt['reason'];
 
   for (const candidate of ranked) {
-    if (Date.now() - started >= timeoutMs) { reason = 'timeout'; break; }
+    if (Date.now() - selectionStarted >= timeoutMs) { reason = 'timeout'; break; }
     if (selectedCandidates.length >= maxItems) { reason = 'budget'; break; }
     const boundedContent = clip(candidate.asset.content, maxCharsPerAsset);
     if (!boundedContent) continue;
