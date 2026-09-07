@@ -95,12 +95,39 @@ export function nextIdentityVersion(current: string): string {
 
 export type AvatarMaterialRole = 'skin' | 'hair' | 'outfit';
 
-export function classifyAvatarMaterial(name: string): AvatarMaterialRole | null {
-  const normalized = name.toLowerCase();
-  if (/(eye|iris|pupil|white|mouth|teeth|tongue|lip)/.test(normalized)) return null;
-  if (/(hair|髪)/.test(normalized)) return 'hair';
-  if (/(skin|face|body|head|肌|顔)/.test(normalized)) return 'skin';
-  if (/(cloth|clothes|dress|shirt|jacket|top|bottom|outfit|uniform|shoe|socks|服|衣)/.test(normalized)) return 'outfit';
+const PROTECTED_FACE_MATERIAL =
+  /(eye|iris|pupil|white|mouth|teeth|tongue|lip|brow|eyeline|eyelash|highlight)/;
+const EXPLICIT_OUTFIT_MATERIAL =
+  /(cloth|clothes|dress|shirt|jacket|top|bottom|outfit|uniform|shoe|socks|服|衣)/;
+
+/**
+ * Classify a render material without letting a generic mesh name override a
+ * more specific material contract. AvatarSample_G intentionally places skin,
+ * clothing and some hair primitives under Body.baked, so materialName must
+ * always win and meshName is only a fallback.
+ */
+export function classifyAvatarMaterial(
+  materialName: string,
+  meshName = '',
+): AvatarMaterialRole | null {
+  const material = materialName.toLowerCase();
+  const mesh = meshName.toLowerCase();
+
+  // Never tint facial detail materials through a Face.baked fallback.
+  if (PROTECTED_FACE_MATERIAL.test(material)) return null;
+
+  // Strong production-asset material signals take precedence over the mesh.
+  if (EXPLICIT_OUTFIT_MATERIAL.test(material)) return 'outfit';
+  if (/(hair|髪)/.test(material)) return 'hair';
+  if (/(skin|肌)/.test(material)) return 'skin';
+
+  // Only then use weaker material semantics and finally the mesh name.
+  if (/(face|body|head|顔)/.test(material)) return 'skin';
+
+  if (PROTECTED_FACE_MATERIAL.test(mesh)) return null;
+  if (EXPLICIT_OUTFIT_MATERIAL.test(mesh)) return 'outfit';
+  if (/(hair|髪)/.test(mesh)) return 'hair';
+  if (/(skin|face|body|head|肌|顔)/.test(mesh)) return 'skin';
   return null;
 }
 
