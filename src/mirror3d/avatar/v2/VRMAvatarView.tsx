@@ -27,7 +27,7 @@ import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import * as THREE from 'three';
 import type { AvatarProfileV2 } from './avatarTypes';
 import { deriveRuntimePose, growthTraitsToBlendShapes } from './avatarPatchEngine';
-import { deriveAvatarIdentityGeometry, safeAppearanceColor } from './avatarPersonalization';
+import { classifyAvatarMaterial, deriveAvatarIdentityGeometry, safeAppearanceColor } from './avatarPersonalization';
 
 interface VRMAvatarViewProps {
   profile: AvatarProfileV2;
@@ -134,7 +134,7 @@ function applyConfirmedAppearanceToModel(root: THREE.Object3D, profile: AvatarPr
     for (const material of materials) {
       const tintable = material as TintableMaterial;
       if (!tintable.color) continue;
-      const role = materialRole(`${mesh.name} ${material.name ?? ''}`);
+      const role = classifyAvatarMaterial(`${mesh.name} ${material.name ?? ''}`);
       if (!role) continue;
 
       const originalKey = 'zhixingOriginalColor';
