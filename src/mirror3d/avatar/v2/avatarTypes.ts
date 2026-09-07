@@ -35,8 +35,12 @@ export interface AvatarAppearance {
   appearanceVersion: number;
   characterId: 'mage' | 'knight' | 'rogue' | 'barbarian' | 'rogue_hooded';
   hairId: string;
+  /** 生产 VRM 可安全映射的用户确认发色；旧档案缺失时由渲染器使用模型原色。 */
+  hairColor?: string;
   glassesId: string | null;
   outfitId: string;
+  /** 生产 VRM 可安全映射的服装主色；只作用于识别出的服装材质。 */
+  outfitColor?: string;
   accessories: string[];
   paletteId: string;
   /** 卡通化程度 0（写实）-1（卡通），默认 0.8 */
@@ -156,7 +160,7 @@ export const NEUTRAL_ADAPTIVE_APPEARANCE: AvatarAdaptiveAppearance = {
 
 export interface AvatarTimelineEntry {
   timelineVersion: number;
-  kind: 'created' | 'appearance_change' | 'stage_confirmed' | 'project_phase' | 'user_saved';
+  kind: 'created' | 'identity_change' | 'appearance_change' | 'stage_confirmed' | 'project_phase' | 'user_saved';
   label: string;
   identityVersion: string;
   appearanceVersion: number;
@@ -259,8 +263,10 @@ export function createDefaultAvatarProfile(nowIso: string): AvatarProfileV2 {
       appearanceVersion: 1,
       characterId: 'mage',
       hairId: 'mage_default',
+      hairColor: '#2A2028',
       glassesId: null,
       outfitId: 'robe_default',
+      outfitColor: '#536BE8',
       accessories: [],
       paletteId: 'indigo_quiet',
       toonLevel: 0.8,

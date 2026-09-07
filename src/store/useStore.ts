@@ -11,6 +11,7 @@ import { seedPermissions } from '../data/seed';
 import { toStateSnapshot } from '../engine/stateAdapter';
 import { enqueue, flush, currentStatus, clearConflicts, clearQueue, type SyncConflict } from '../services/sync';
 import { useServiceContractStore } from './useServiceContractStore';
+import { inferJournalDomain, journalTitle, type JournalInputOptions } from '../ai-native/intake/journalRecord';
 
 const PROFILE_KEY = 'zx_profile';
 
@@ -79,7 +80,7 @@ interface AppState {
    */
   addExperiment: (e: Experiment) => Promise<void>;
   checkInExperiment: (id: string, note: string) => Promise<void>;
-  addJournal: (text: string) => Promise<void>;
+  addJournal: (text: string, options?: JournalInputOptions) => Promise<void>;
   addCommitment: (c: Commitment) => Promise<void>;
   addChat: (msgs: ChatMessage[]) => void;
   forgetEvent: (id: string) => Promise<void>;
@@ -337,15 +338,27 @@ export const useStore = create<AppState>((set, get) => {
       await get().refreshState();
     },
 
-    addJournal: async (text) => {
+    addJournal: async (text, options = {}) => {
+      const clean = text.trim();
+      if (!clean) return;
+      const sourceRef = options.sourceRef ?? 'text-diary';
       const ev: LifeEvent = {
-        id: `j-${Date.now()}`, type: 'journal', title: `日记：${text.slice(0, 18)}${text.length > 18 ? '…' : ''}`,
-        sourceType: 'user', sourceRef: 'text-diary', startTime: new Date().toISOString(),
-        domain: '工作', sensitivity: 'sensitive', confidence: 1, consentId: 'perm-journal',
-        layer: 'fact', axis: 'inner', userInterpretation: text,
+        id: `j-${Date.now()}`,
+        type: 'journal',
+        title: journalTitle(clean, options.titlePrefix ?? '日记'),
+        sourceType: 'user',
+        sourceRef,
+        startTime: new Date().toISOString(),
+        domain: options.domain ?? inferJournalDomain(clean),
+        sensitivity: options.sensitivity ?? 'sensitive',
+        confidence: 1,
+        consentId: 'perm-journal',
+        layer: 'fact',
+        axis: 'inner',
+        userInterpretation: clean,
       };
       set((s) => ({ events: [ev, ...s.events] }));
-      get().pushAudit('用户', '记录一条日记');
+      get().pushAudit('用户', `记录一条${sourceRef === 'photo-note' ? '照片' : sourceRef === 'voice-note' ? '语音' : sourceRef === 'avatar-editor' ? '孪生' : '文字'}记录`);
       pushMutation('POST', '/api/data/events', ev, `ev:${ev.id}`);
       try { await get().refreshState(); } catch { /* 网络重试由同步层负责 */ }
     },

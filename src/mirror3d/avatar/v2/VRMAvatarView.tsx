@@ -27,6 +27,7 @@ import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import * as THREE from 'three';
 import type { AvatarProfileV2 } from './avatarTypes';
 import { deriveRuntimePose, growthTraitsToBlendShapes } from './avatarPatchEngine';
+import { classifyAvatarMaterial, deriveAvatarIdentityGeometry, safeAppearanceColor } from './avatarPersonalization';
 
 interface VRMAvatarViewProps {
   profile: AvatarProfileV2;
@@ -101,6 +102,46 @@ function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 function clamp01(v: number): number { return Math.min(1, Math.max(0, v)); }
+
+type TintableMaterial = THREE.Material & {
+  color?: THREE.Color;
+  roughness?: number;
+  metalness?: number;
+  userData: Record<string, unknown>;
+};
+
+
+function applyConfirmedAppearanceToModel(root: THREE.Object3D, profile: AvatarProfileV2): void {
+  const targets = {
+    skin: new THREE.Color(safeAppearanceColor(profile.identity.skinMaterial.baseColor, '#F2C89B')),
+    hair: new THREE.Color(safeAppearanceColor(profile.appearance.hairColor, '#2A2028')),
+    outfit: new THREE.Color(safeAppearanceColor(profile.appearance.outfitColor, '#536BE8')),
+  };
+  const strengths = { skin: 0.22, hair: 0.52, outfit: 0.44 } as const;
+
+  root.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.material) return;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const material of materials) {
+      const tintable = material as TintableMaterial;
+      if (!tintable.color) continue;
+      const role = classifyAvatarMaterial(material.name ?? '', mesh.name);
+      if (!role) continue;
+
+      const originalKey = 'zhixingOriginalColor';
+      const originalHex = typeof tintable.userData?.[originalKey] === 'string'
+        ? String(tintable.userData[originalKey])
+        : `#${tintable.color.getHexString()}`;
+      tintable.userData = tintable.userData ?? {};
+      tintable.userData[originalKey] = originalHex;
+
+      const original = new THREE.Color(originalHex);
+      tintable.color.copy(original).lerp(targets[role], strengths[role]);
+      tintable.needsUpdate = true;
+    }
+  });
+}
 
 /* ───────────── AIRI眼跳间隔概率分布（移植自AIRI eye-motions.ts） ─────────────
  * 人类眼跳间隔：800ms内快速眼跳占~45%，0.8-2s中等注视占~40%，2-4s长注视占~15%
@@ -537,6 +578,7 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
   const vrmRef = useRef<VRM | null>(null);
   const motionRef = useRef<NaturalMotionState>(createInitialMotionState());
   const initialRotationsRef = useRef<Map<THREE.Bone, THREE.Euler>>(new Map());
+  const initialScalesRef = useRef<Map<THREE.Bone, THREE.Vector3>>(new Map());
   /** 眼下疲劳是独立、可移除的临时材质层，不修改基础模型纹理。 */
   const fatigueOverlayRef = useRef<THREE.Group | null>(null);
   const fatigueMaterialsRef = useRef<THREE.MeshBasicMaterial[]>([]);
@@ -657,13 +699,18 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
 
         scene.updateMatrixWorld(true);
 
-        // 保存A-pose作为初始旋转基线
+        // 保存A-pose作为初始旋转/缩放基线。身份几何始终相对这个基线应用，
+        // 避免每次渲染累积缩放，也不修改原始 GLB 资产。
         initialRotationsRef.current.clear();
+        initialScalesRef.current.clear();
         Object.values(bones).forEach(bone => {
           if (bone) {
             initialRotationsRef.current.set(bone, bone.rotation.clone());
+            initialScalesRef.current.set(bone, bone.scale.clone());
           }
         });
+
+        applyConfirmedAppearanceToModel(scene, profile);
 
         const blendMeshes = findBlendShapeMeshes(scene);
         blendMeshesRef.current = blendMeshes;
@@ -862,6 +909,18 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
     };
   }, [url, onLoaded, onError]);
 
+  // 用户确认的肤色/发色/服装色只作用于明确识别出的材质。
+  // 每次都从首次缓存的原始材质颜色重新混合，避免热更新或多次保存造成颜色累积漂移。
+  useEffect(() => {
+    if (!model) return;
+    applyConfirmedAppearanceToModel(model, profile);
+  }, [
+    model,
+    profile.identity.skinMaterial.baseColor,
+    profile.appearance.hairColor,
+    profile.appearance.outfitColor,
+  ]);
+
   // 成长痕迹只在growthTraits变化时重新计算（极低频）
   const traitsRef = useRef(profile.growthTraits);
   useEffect(() => {
@@ -961,12 +1020,16 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
 
     const state = motionRef.current;
     const pose = deriveRuntimePose(profile);
+    const identityGeometry = deriveAvatarIdentityGeometry(profile);
     const ts = pose.timeScale;
 
-    // 体型趋势最多 ±6%，平滑作用于临时容器，不写回基础模型。
+    // 用户确认的基础体格与生活数据临时体型变化分层叠加：
+    // identityGeometry 是稳定身份，pose.bodyScaleXZ 是会衰减的临时状态。
     const scaleBlend = 1 - Math.exp(-2.4 * Math.min(delta, 0.05));
-    groupRef.current.scale.x += (pose.bodyScaleXZ - groupRef.current.scale.x) * scaleBlend;
-    groupRef.current.scale.z += (pose.bodyScaleXZ - groupRef.current.scale.z) * scaleBlend;
+    const bodyWidthTarget = pose.bodyScaleXZ * identityGeometry.bodyScaleX;
+    groupRef.current.scale.x += (bodyWidthTarget - groupRef.current.scale.x) * scaleBlend;
+    groupRef.current.scale.z += (bodyWidthTarget - groupRef.current.scale.z) * scaleBlend;
+    groupRef.current.scale.y += (identityGeometry.bodyScaleY - groupRef.current.scale.y) * scaleBlend;
     for (const material of fatigueMaterialsRef.current) {
       material.opacity += (pose.darkCircleOpacity - material.opacity) * scaleBlend;
     }
@@ -1263,6 +1326,18 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
       // SpringBone头发弹簧骨骼物理更新（VRM标准头发/饰品物理）
       if (vrm.springBoneManager) {
         vrm.springBoneManager.update(delta);
+      }
+    }
+
+    // VRM.update 可能会重置标准骨骼，因此在其后应用用户已确认的克制身份几何。
+    // 当前生产模型没有完整的可编辑脸部 morph 库，先真实支持脸宽/脸长与体格比例；
+    // 其余拟合参数仍版本化保存，待未来替换为具备对应 morph 的模型后直接复用。
+    if (head) {
+      const baseScale = initialScalesRef.current.get(head);
+      if (baseScale) {
+        head.scale.x = baseScale.x * identityGeometry.headScaleX;
+        head.scale.y = baseScale.y * identityGeometry.headScaleY;
+        head.scale.z = baseScale.z;
       }
     }
 

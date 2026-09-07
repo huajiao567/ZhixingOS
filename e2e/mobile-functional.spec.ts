@@ -61,6 +61,11 @@ test.describe('390x844 手机界面功能冒烟', () => {
     await recordInput.fill('昨晚熬夜，只睡了 4.5 小时，今天压力很大');
     await page.getByRole('button', { name: '发送' }).click();
     await expect(page.getByText(/已收进今天/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/昨晚熬夜，只睡了 4.5 小时/)).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: '展开今天的记录' }).click();
+    await expect(page.getByText('文字', { exact: true }).first()).toBeVisible();
+    await screenshot(page, '01b-today-records');
+    await page.getByRole('button', { name: '收起今天的记录' }).click();
 
     await page.getByRole('button', { name: '现在的我' }).click();
     await expect(page.getByText('镜像', { exact: true }).first()).toBeVisible();
@@ -70,6 +75,28 @@ test.describe('390x844 手机界面功能冒烟', () => {
     await expect(page.getByText(/不作心理诊断/)).toBeVisible();
     await page.getByRole('button', { name: '关闭显示解释' }).click();
     await screenshot(page, '02-mirror');
+
+    await page.getByRole('button', { name: '调整形象与状态，打开三维镜像编辑器' }).click();
+    await expect(page.getByText('我的三维镜像', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await page.waitForFunction(
+      () => (window as typeof window & { __avatarLoadState?: { phase?: string } }).__avatarLoadState?.phase === 'ready',
+      undefined,
+      { timeout: 120_000 },
+    );
+    await page.getByRole('tab', { name: /切换到捏脸标签/ }).click();
+    await expect(page.getByText(/当前页面直接预览正式 V2 VRM/)).toBeVisible();
+    await page.getByRole('button', { name: /服装色青碧/ }).click();
+    await page.getByRole('button', { name: '保存到我的数字孪生' }).click();
+    await expect(page.getByText(/已保存到正式数字孪生/)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/V2 · 身份 1\.0\.1/)).toBeVisible();
+    await screenshot(page, '02b-avatar-editor-saved');
+    await page.getByRole('button', { name: '关闭' }).click();
+
+    await page.getByRole('button', { name: '查看时间中的自己' }).click();
+    await expect(page.getByText('确认我的三维形象', { exact: true })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/身份 1\.0\.1 · 外观 2/)).toBeVisible();
+    await page.getByRole('button', { name: '关闭时间中的自己' }).click();
+
     await page.getByRole('button', { name: '返回主页' }).click();
     await expect(page.getByRole('button', { name: '现在的我' })).toBeVisible();
 

@@ -25,6 +25,7 @@ import { pickPhoto, takePhoto, useAudioCapture } from '../../services/mediaCaptu
 import { assertEnvelopeTraceable, createPhotoEnvelope } from '../../ai-native/intake/eventEnvelope';
 import { extractSelfReportedLifeSignals } from '../../ai-native/connectors/selfReportSignals';
 import { useLifeSignalStore } from '../../ai-native/connectors/useLifeSignalStore';
+import { TodayRecordStrip } from '../../components/TodayRecordStrip';
 import { ContinuityInboxCard } from '../../components/ContinuityInboxCard';
 
 type MirrorType = 'emotion' | 'health' | 'planning';
@@ -433,7 +434,11 @@ export function MirrorHome() {
         `来源：${mode === 'camera' ? '相机拍摄' : '相册选择'} · ${photo.width} × ${photo.height} · ${photo.mimeType}`,
         `引用凭据：${photo.sourceRef}`,
         '保存去向：今日日记 · 5 秒内可撤回',
-      ].join('\n'));
+      ].join('\n'), {
+        sourceRef: 'photo-note',
+        titlePrefix: '照片记录',
+        sensitivity: 'sensitive',
+      });
       const id = await captureEventIdAfterAdd(0);
       triggerSaveFeedback('照片已保存 · 可补一句说明', id);
       triggerInhale('📷 照片');
@@ -504,7 +509,11 @@ export function MirrorHome() {
         `引用凭据：${captured.sourceRef}`,
         `时长：${captured.durationMs}ms`,
         `类型：${captured.mimeType}`,
-      ].join('\n'));
+      ].join('\n'), {
+        sourceRef: 'voice-note',
+        titlePrefix: '语音记录',
+        sensitivity: 'sensitive',
+      });
       const id = await captureEventIdAfterAdd(0);
       triggerSaveFeedback('语音已真实保存', id);
       triggerInhale(label);
@@ -758,6 +767,9 @@ export function MirrorHome() {
         </View>
       </View>
 
+      {/* 今天的记录保持低占用：默认一行，展开后最多显示最近三条。 */}
+      <TodayRecordStrip events={s.events} />
+
       {/* 吸入记忆动画 */}
       {inhaleVisible && (
         <MemoryInhale key={inhaleKey} text={inhaleText} anim={inhaleAnim} startX={inhaleStartX} startY={inhaleStartY} endX={inhaleEndX} endY={inhaleEndY} />
@@ -906,6 +918,7 @@ export function MirrorHome() {
               onChangeText={setTextInput}
               onSubmitEditing={handleSubmitText}
               returnKeyType="send"
+              accessibilityLabel="快速记录"
             />
             {textInput.length > 0 ? (
               <Pressable
