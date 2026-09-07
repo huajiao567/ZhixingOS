@@ -61,6 +61,34 @@ export interface AvatarLoadState {
   center?: { x: number; y: number; z: number };
 }
 
+export interface AvatarRuntimeProbe {
+  updatedAt: number;
+  identity: {
+    faceWidth: number;
+    faceHeight: number;
+    jawRoundness: number;
+    eyeSize: number;
+    eyeSpacing: number;
+    browAngle: number;
+    noseSize: number;
+    mouthWidth: number;
+    bodyScale: number;
+    shoulderWidth: number;
+  };
+  geometry: {
+    groupScale: { x: number; y: number; z: number };
+    headLocalScale?: { x: number; y: number; z: number };
+    headWorldScale?: { x: number; y: number; z: number };
+    shoulderRootNames: string[];
+    shoulderWorldDistance?: number;
+  };
+  appearance: {
+    skin?: string;
+    hair?: string;
+    outfit?: string;
+  };
+}
+
 // 相机构图基线由 Web 与 Native 共用；不能依赖 window，否则 Android 首帧会崩溃。
 const cameraDefaults = {
   distance: 1.5,
@@ -116,13 +144,17 @@ type TintableMaterial = THREE.Material & {
 };
 
 
-function applyConfirmedAppearanceToModel(root: THREE.Object3D, profile: AvatarProfileV2): void {
+function applyConfirmedAppearanceToModel(
+  root: THREE.Object3D,
+  profile: AvatarProfileV2,
+): AvatarRuntimeProbe['appearance'] {
   const targets = {
     skin: new THREE.Color(safeAppearanceColor(profile.identity.skinMaterial.baseColor, '#F2C89B')),
     hair: new THREE.Color(safeAppearanceColor(profile.appearance.hairColor, '#2A2028')),
     outfit: new THREE.Color(safeAppearanceColor(profile.appearance.outfitColor, '#536BE8')),
   };
   const strengths = { skin: 0.22, hair: 0.52, outfit: 0.44 } as const;
+  const sample: AvatarRuntimeProbe['appearance'] = {};
 
   root.traverse((child) => {
     const mesh = child as THREE.Mesh;
@@ -144,8 +176,10 @@ function applyConfirmedAppearanceToModel(root: THREE.Object3D, profile: AvatarPr
       const original = new THREE.Color(originalHex);
       tintable.color.copy(original).lerp(targets[role], strengths[role]);
       tintable.needsUpdate = true;
+      sample[role] ??= `#${tintable.color.getHexString().toUpperCase()}`;
     }
   });
+  return sample;
 }
 
 /* ───────────── AIRI眼跳间隔概率分布（移植自AIRI eye-motions.ts） ─────────────
@@ -516,6 +550,14 @@ function reportAvatarLoad(phase: AvatarLoadPhase, details: Omit<AvatarLoadState,
     __avatarLoadState?: AvatarLoadState;
   };
   root.__avatarLoadState = currentAvatarLoadState;
+}
+
+function reportAvatarRuntimeProbe(probe: AvatarRuntimeProbe) {
+  if (typeof globalThis === 'undefined') return;
+  const root = globalThis as typeof globalThis & {
+    __avatarRuntimeProbe?: AvatarRuntimeProbe;
+  };
+  root.__avatarRuntimeProbe = probe;
 }
 
 function loadGLTFCached(url: string): Promise<GLTF> {
