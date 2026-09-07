@@ -347,6 +347,22 @@ export const api = {
     api.del<{ ok: boolean; source: string; deletedCount: number; cascadedRecompute: number; deletedAt: string }>(
       `/api/data/evidence-by-source/${source}`,
     ),
+  devices: {
+    list: (limit = 50) =>
+      api.get<Paginated<DevicePresenceRecord>>(`/api/runtime/devices?limit=${limit}`),
+    register: (body: {
+      id: string;
+      label: string;
+      surface: DeviceSurface;
+      platform: DevicePlatform;
+      appVersion?: string;
+      capabilities: string[];
+    }) => api.post<DevicePresenceRecord>('/api/runtime/devices', body),
+    heartbeat: (id: string) =>
+      api.post<DevicePresenceRecord>(`/api/runtime/devices/${encodeURIComponent(id)}/heartbeat`, {}),
+    revoke: (id: string) =>
+      api.post<DevicePresenceRecord>(`/api/runtime/devices/${encodeURIComponent(id)}/revoke`, {}),
+  },
   continuity: {
     list: (target: ContinuitySurface, limit = 20) =>
       api.get<Paginated<ContinuityHandoff>>(
@@ -380,6 +396,22 @@ export const api = {
       api.get<AuditPage>(`/api/data/audit${buildQuery(params)}`),
   },
 };
+
+export type DeviceSurface = 'desktop' | 'mobile';
+export type DevicePlatform = 'web' | 'ios' | 'android' | 'windows' | 'macos' | 'linux' | 'unknown';
+
+export interface DevicePresenceRecord {
+  id: string;
+  user_id: string;
+  label: string;
+  surface: DeviceSurface;
+  platform: DevicePlatform;
+  app_version: string | null;
+  capabilities: string[];
+  created_at: string;
+  last_seen_at: string;
+  revoked_at: string | null;
+}
 
 export type ContinuitySurface = 'desktop' | 'mobile';
 export type ContinuityHandoffStatus = 'open' | 'consumed' | 'cancelled';
