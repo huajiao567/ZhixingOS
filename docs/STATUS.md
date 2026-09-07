@@ -1,6 +1,6 @@
 # 项目状态
 
-最后更新：2026-08-26
+最后更新：2026-09-07
 
 ## 当前结论
 
@@ -16,9 +16,9 @@
 | 分层记忆与数字孪生 | implemented-v1 | L0-L3 召回预算、来源与版本；证据阈值、反例、纠正、回滚 | 30 天以上衰减/合并、跨设备一致性、长期用户研究 |
 | 易理变化内核 | implemented-v1 | 时位势应变中、替代路径、风险、停止条件、复审时间 | 阶段迁移与张力图、现实反馈校准、纵向有效性研究 |
 | 3D 数字人 | implemented-v1 | 真实 VRM/GLB、动态表情/姿态、照片拟合、阶段时间线、生活信号限幅适应 | 物理设备视觉质量、不同模型骨骼兼容、长期养成验证 |
-| 生活数据 | contract-complete / adapters-pending | Health Connect/小米、手机使用、ActivityWatch、饮食照片/条码的统一协议、权限和隐私边界 | 各平台原生模块、桌面伴侣、真实数据去重与同步矩阵 |
+| 生活数据 | contract-complete / adapters-pending | Health Connect/小米、手机使用、ActivityWatch、饮食照片/条码的统一协议、权限和隐私边界 | 各平台原生模块、真实数据去重与同步矩阵 |
 | 数据主权 | implemented-v1 | 来源授权、审计、导出、撤回、按来源软删除与派生重算 | 加密数据包、备份删除 SLA、部署地区合规验证 |
-| Android 交付 | test-apk | SDK 36、四 ABI、bundled ML Kit、v2 debug 签名、可侧载 APK | 物理 Android 安装/权限/离线矩阵、production keystore、AAB |
+| 桌面工作台 | implemented-v1 | ≥1100px Web 进入独立宽屏工作台；承诺/项目/实验并列、统一工作台快速入口、键盘快捷键、共享后端对象与同步状态 | 原生桌面壳、文件/窗口连接器、显式跨设备 handoff 与冲突合并 |\n| Android 交付 | test-apk | SDK 36、四 ABI、bundled ML Kit、v2 debug 签名、可侧载 APK | 物理 Android 安装/权限/离线矩阵、production keystore、AAB |
 | 开源工程 | release-candidate | MIT、贡献/治理/安全/隐私文档、依赖与候选文件审计 | 仓库 URL、维护者联系人、历史凭据扫描、首个可复现 tag |
 
 ## 三个核心思想的融合
@@ -34,7 +34,7 @@
 - 后端契约/记忆测试：6/6。
 - 前后端 TypeScript：通过。
 - Expo Doctor：21/21；Web production export：通过。
-- 390 × 844 触摸视口 E2E：3/3，覆盖生活信号到 3D 解释、数据主权、错误登录和工作台执行/撤销。
+- 1440 × 960 桌面工作台 E2E：1/1，覆盖宽屏入口、键盘聚焦、统一执行内核跳转和进程导航。\n- 390 × 844 触摸视口 E2E：3/3，覆盖生活信号到 3D 解释、数据主权、错误登录和工作台执行/撤销。
 - Android release 编译与 v2 debug 签名校验：通过；APK 字节与 SHA-256 见 [ANDROID_APK_TEST.md](ANDROID_APK_TEST.md)。
 - 开源候选审计：205 个文件，未发现候选密钥、数据库、APK、私钥或超大文件。
 

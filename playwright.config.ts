@@ -43,6 +43,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         channel: undefined,
+        viewport: { width: 1440, height: 960 },
         launchOptions: {
           executablePath: chromiumExecutablePath,
           args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
