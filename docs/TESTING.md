@@ -15,7 +15,31 @@ npm run audit:open-source
 npm --prefix backend run build
 ```
 
-## Web 桌面工作台\n\n先启动后端与 Web，再运行：\n\n```powershell\nnpm --prefix backend run dev\nnpm run web\nnpm run test:desktop\n```\n\nPlaywright 固定使用 1440 × 960 桌面视口，验证宽屏工作台入口、键盘快捷输入、统一执行内核跳转和主要导航。它证明桌面 Web 交互路径通过，不等价于 Windows/macOS 原生桌面壳已经验证。\n\n## Web 手机视口
+## Web 桌面工作台
+
+先启动后端与 Web，再运行：
+
+```powershell
+npm --prefix backend run dev
+npm run web
+npm run test:desktop
+```
+
+Playwright 固定使用 1440 × 960 桌面视口，验证宽屏工作台入口、键盘快捷输入、统一执行内核跳转和主要导航。它证明桌面 Web 交互路径通过，不等价于 Windows/macOS 原生桌面壳已经验证。
+
+## 电脑 ↔ 手机连续性
+
+先启动同一后端与 Web，再运行：
+
+```powershell
+npm --prefix backend run dev
+npm run web
+npm run test:continuity
+```
+
+该用例创建两个独立浏览器上下文：1440 × 960 代表电脑端，390 × 844 代表手机端。两端登录同一账号，依次验证电脑创建接力、手机发现并消费、手机反向创建接力、电脑消费，以及消费后接力不再出现在收件箱。它验证的是显式服务端 handoff 协议与 UI 连续性，不等价于系统剪贴板、后台推送、原生深链或物理设备网络切换已经验证。
+
+## Web 手机视口
 
 先启动后端与 Web，再运行：
 
@@ -49,7 +73,9 @@ npm run build:apk
 |---|---|---|
 | 代码/类型 | 接口和实现可编译 | 功能在设备上可用 |
 | 单元/契约 | 规则与边界在合成数据通过 | 原生权限、性能或视觉通过 |
-| Web 桌面视口 | 宽屏工作台布局和 Web 执行路径通过 | Windows/macOS 原生文件、窗口、托盘等系统能力通过 |\n| Web 移动视口 | 手机布局和 Web 执行路径通过 | Android/iOS 系统能力通过 |
+| Web 桌面视口 | 宽屏工作台布局和 Web 执行路径通过 | Windows/macOS 原生文件、窗口、托盘等系统能力通过 |
+| 双浏览器跨端 E2E | 同一后端上的显式电脑↔手机接力协议、消费语义与 UI 链路通过 | 物理设备、后台推送、系统剪贴板、原生深链通过 |
+| Web 移动视口 | 手机布局和 Web 执行路径通过 | Android/iOS 系统能力通过 |
 | 原生编译/验签 | APK 包含原生代码且签名可验证 | 已安装、已授权或视觉质量通过 |
 | 模拟器 | 特定系统镜像中的原生流程通过 | 物理传感器和厂商 ROM 通过 |
 | 物理设备 | 指定设备、系统和步骤通过 | 其他设备矩阵或生产发布通过 |
