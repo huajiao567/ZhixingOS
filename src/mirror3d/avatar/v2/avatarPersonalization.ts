@@ -93,6 +93,17 @@ export function nextIdentityVersion(current: string): string {
   return [Number(match[1]), Number(match[2]), Number(match[3]) + 1].join('.');
 }
 
+export type AvatarMaterialRole = 'skin' | 'hair' | 'outfit';
+
+export function classifyAvatarMaterial(name: string): AvatarMaterialRole | null {
+  const normalized = name.toLowerCase();
+  if (/(eye|iris|pupil|white|mouth|teeth|tongue|lip)/.test(normalized)) return null;
+  if (/(hair|髪)/.test(normalized)) return 'hair';
+  if (/(skin|face|body|head|肌|顔)/.test(normalized)) return 'skin';
+  if (/(cloth|clothes|dress|shirt|jacket|top|bottom|outfit|uniform|shoe|socks|服|衣)/.test(normalized)) return 'outfit';
+  return null;
+}
+
 export function safeAppearanceColor(value: string | undefined, fallback: string): string {
   if (!value || !/^#[0-9a-fA-F]{6}$/.test(value)) return fallback;
   return value.toUpperCase();
