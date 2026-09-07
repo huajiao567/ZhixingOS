@@ -5,6 +5,40 @@ import { resolve } from 'node:path';
 const WEB_BASE = process.env.WEB_BASE ?? 'http://localhost:8081';
 const SHOTS = resolve('e2e', 'mobile-screenshots');
 
+type AvatarRuntimeProbe = {
+  updatedAt: number;
+  identity: {
+    faceWidth: number;
+    faceHeight: number;
+    eyeSize: number;
+    bodyScale: number;
+    shoulderWidth: number;
+  };
+  geometry: {
+    groupScale: { x: number; y: number; z: number };
+    headWorldScale?: { x: number; y: number; z: number };
+    shoulderWorldDistance?: number;
+    shoulderRootNames: string[];
+  };
+  appearance: { skin?: string; hair?: string; outfit?: string };
+};
+
+async function readAvatarRuntimeProbe(page: Page): Promise<AvatarRuntimeProbe> {
+  return page.evaluate(() => {
+    const root = window as typeof window & { __avatarRuntimeProbe?: AvatarRuntimeProbe };
+    if (!root.__avatarRuntimeProbe) throw new Error('avatar runtime probe is not ready');
+    return root.__avatarRuntimeProbe;
+  });
+}
+
+async function setIdentitySliderToEnd(page: Page, label: string) {
+  const slider = page.getByLabel(new RegExp(`^${label}，`)).first();
+  await expect(slider).toBeVisible();
+  await slider.focus();
+  await slider.press('End');
+}
+
+
 async function waitForApp(page: Page) {
   await page.goto(WEB_BASE, { waitUntil: 'domcontentloaded', timeout: 90_000 });
   await page.waitForFunction(() => {
@@ -88,7 +122,76 @@ test.describe('390x844 手机界面功能冒烟', () => {
     await expect(page.getByText('预览生效', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('当前仅保存', { exact: true }).first()).toBeVisible();
     await expect(page.getByText(/肩宽走肩骨\/上臂根节点/)).toBeVisible();
+
+    // 生产 VRM runtime proof：不是只验证 store/UI 值，而是读取 renderer
+    // 已经应用后的 Three.js 世界变换和材质结果。
+    await page.waitForFunction(() => {
+      const probe = (window as typeof window & { __avatarRuntimeProbe?: AvatarRuntimeProbe }).__avatarRuntimeProbe;
+      return Boolean(probe?.geometry.headWorldScale && probe?.geometry.shoulderWorldDistance);
+    }, undefined, { timeout: 20_000 });
+    const baselineProbe = await readAvatarRuntimeProbe(page);
+
+    await setIdentitySliderToEnd(page, '脸宽');
+    await page.waitForFunction((baselineHeadX) => {
+      const probe = (window as typeof window & { __avatarRuntimeProbe?: AvatarRuntimeProbe }).__avatarRuntimeProbe;
+      return Boolean(
+        probe
+        && probe.identity.faceWidth > 0.98
+        && probe.geometry.headWorldScale
+        && probe.geometry.headWorldScale.x > baselineHeadX + 0.02,
+      );
+    }, baselineProbe.geometry.headWorldScale!.x, { timeout: 15_000 });
+    const faceProbe = await readAvatarRuntimeProbe(page);
+    await screenshot(page, '02a-avatar-face-width-runtime');
+
+    await setIdentitySliderToEnd(page, '身体比例');
+    await page.waitForFunction(({ previousGroupX, expectedHeadX }) => {
+      const probe = (window as typeof window & { __avatarRuntimeProbe?: AvatarRuntimeProbe }).__avatarRuntimeProbe;
+      return Boolean(
+        probe
+        && probe.identity.bodyScale > 0.98
+        && probe.geometry.groupScale.x > previousGroupX + 0.015
+        && probe.geometry.headWorldScale
+        && Math.abs(probe.geometry.headWorldScale.x - expectedHeadX) < 0.004,
+      );
+    }, {
+      previousGroupX: faceProbe.geometry.groupScale.x,
+      expectedHeadX: faceProbe.geometry.headWorldScale!.x,
+    }, { timeout: 15_000 });
+    const bodyProbe = await readAvatarRuntimeProbe(page);
+
+    await setIdentitySliderToEnd(page, '肩宽');
+    await page.waitForFunction((previousShoulderDistance) => {
+      const probe = (window as typeof window & { __avatarRuntimeProbe?: AvatarRuntimeProbe }).__avatarRuntimeProbe;
+      return Boolean(
+        probe
+        && probe.identity.shoulderWidth > 0.98
+        && probe.geometry.shoulderWorldDistance
+        && probe.geometry.shoulderWorldDistance > previousShoulderDistance * 1.02,
+      );
+    }, bodyProbe.geometry.shoulderWorldDistance!, { timeout: 15_000 });
+    const shoulderProbe = await readAvatarRuntimeProbe(page);
+
+    // 当前模型的 eyeSize 是 stored-only：值可以进入预览 profile，但不能偷偷改变
+    // 已验证的头部/身体/肩部几何通道。
+    await setIdentitySliderToEnd(page, '眼睛大小');
+    await page.waitForFunction(() => {
+      const probe = (window as typeof window & { __avatarRuntimeProbe?: AvatarRuntimeProbe }).__avatarRuntimeProbe;
+      return Boolean(probe && probe.identity.eyeSize > 0.98);
+    }, undefined, { timeout: 10_000 });
+    const storedOnlyProbe = await readAvatarRuntimeProbe(page);
+    expect(Math.abs(storedOnlyProbe.geometry.headWorldScale!.x - shoulderProbe.geometry.headWorldScale!.x)).toBeLessThan(0.004);
+    expect(Math.abs(storedOnlyProbe.geometry.groupScale.x - shoulderProbe.geometry.groupScale.x)).toBeLessThan(0.004);
+    expect(Math.abs(storedOnlyProbe.geometry.shoulderWorldDistance! - shoulderProbe.geometry.shoulderWorldDistance!)).toBeLessThan(0.004);
+
+    const outfitBefore = storedOnlyProbe.appearance.outfit;
     await page.getByRole('button', { name: /服装色青碧/ }).click();
+    await page.waitForFunction((previousOutfit) => {
+      const probe = (window as typeof window & { __avatarRuntimeProbe?: AvatarRuntimeProbe }).__avatarRuntimeProbe;
+      return Boolean(probe?.appearance.outfit && probe.appearance.outfit !== previousOutfit);
+    }, outfitBefore, { timeout: 10_000 });
+    await screenshot(page, '02b-avatar-runtime-personalized');
+
     await page.getByRole('button', { name: '保存到我的数字孪生' }).click();
     await expect(page.getByText(/已保存到正式数字孪生/)).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText(/V2 · 身份 1\.0\.1/)).toBeVisible();
