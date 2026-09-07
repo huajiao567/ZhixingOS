@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { actionReceiptSchema, lifeObjectSchema, twinProfileSchema } from '../src/routes/runtime';
+import { actionReceiptSchema, continuityHandoffSchema, lifeObjectSchema, twinProfileSchema } from '../src/routes/runtime';
 
 const now = '2026-08-22T01:00:00.000Z';
 
@@ -33,4 +33,20 @@ test('twin profile contract requires a positive version and bounded collections'
   };
   assert.equal(twinProfileSchema.safeParse(base).success, true);
   assert.equal(twinProfileSchema.safeParse({ ...base, version: 0 }).success, false);
+});
+
+test('continuity handoff contract is cross-surface, bounded and traceable', () => {
+  const base = {
+    id: 'handoff-1',
+    sourceSurface: 'desktop',
+    targetSurface: 'mobile',
+    title: '继续整理实验记录',
+    payload: { kind: 'workspace_text', text: '继续整理实验记录', route: 'Workspace' },
+    createdAt: now,
+    expiresAt: '2026-08-23T01:00:00.000Z',
+  };
+  assert.equal(continuityHandoffSchema.safeParse(base).success, true);
+  assert.equal(continuityHandoffSchema.safeParse({ ...base, targetSurface: 'desktop' }).success, false);
+  assert.equal(continuityHandoffSchema.safeParse({ ...base, payload: { kind: 'workspace_text' } }).success, false);
+  assert.equal(continuityHandoffSchema.safeParse({ ...base, expiresAt: '2026-08-22T00:00:00.000Z' }).success, false);
 });
