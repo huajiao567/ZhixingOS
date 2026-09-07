@@ -27,7 +27,12 @@ import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import * as THREE from 'three';
 import type { AvatarProfileV2 } from './avatarTypes';
 import { deriveRuntimePose, growthTraitsToBlendShapes } from './avatarPatchEngine';
-import { classifyAvatarMaterial, deriveAvatarIdentityGeometry, safeAppearanceColor } from './avatarPersonalization';
+import {
+  classifyAvatarMaterial,
+  deriveAvatarIdentityGeometry,
+  deriveCompensatedHeadLocalScale,
+  safeAppearanceColor,
+} from './avatarPersonalization';
 
 interface VRMAvatarViewProps {
   profile: AvatarProfileV2;
@@ -579,6 +584,7 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
   const motionRef = useRef<NaturalMotionState>(createInitialMotionState());
   const initialRotationsRef = useRef<Map<THREE.Bone, THREE.Euler>>(new Map());
   const initialScalesRef = useRef<Map<THREE.Bone, THREE.Vector3>>(new Map());
+  const initialPositionsRef = useRef<Map<THREE.Bone, THREE.Vector3>>(new Map());
   /** 眼下疲劳是独立、可移除的临时材质层，不修改基础模型纹理。 */
   const fatigueOverlayRef = useRef<THREE.Group | null>(null);
   const fatigueMaterialsRef = useRef<THREE.MeshBasicMaterial[]>([]);
@@ -699,14 +705,16 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
 
         scene.updateMatrixWorld(true);
 
-        // 保存A-pose作为初始旋转/缩放基线。身份几何始终相对这个基线应用，
-        // 避免每次渲染累积缩放，也不修改原始 GLB 资产。
+        // 保存A-pose作为初始旋转/缩放/位置基线。身份几何始终相对这个基线应用，
+        // 避免每次渲染累积变形，也不修改原始 GLB 资产。
         initialRotationsRef.current.clear();
         initialScalesRef.current.clear();
+        initialPositionsRef.current.clear();
         Object.values(bones).forEach(bone => {
           if (bone) {
             initialRotationsRef.current.set(bone, bone.rotation.clone());
             initialScalesRef.current.set(bone, bone.scale.clone());
+            initialPositionsRef.current.set(bone, bone.position.clone());
           }
         });
 
@@ -1024,9 +1032,10 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
     const ts = pose.timeScale;
 
     // 用户确认的基础体格与生活数据临时体型变化分层叠加：
-    // identityGeometry 是稳定身份，pose.bodyScaleXZ 是会衰减的临时状态。
+    // identityGeometry.bodyScaleXZ 是稳定身体框架，pose.bodyScaleXZ 是会衰减的临时状态。
+    // shoulderWidth 不再通过整个 group 缩放实现，避免连头部一起被拉宽。
     const scaleBlend = 1 - Math.exp(-2.4 * Math.min(delta, 0.05));
-    const bodyWidthTarget = pose.bodyScaleXZ * identityGeometry.bodyScaleX;
+    const bodyWidthTarget = pose.bodyScaleXZ * identityGeometry.bodyScaleXZ;
     groupRef.current.scale.x += (bodyWidthTarget - groupRef.current.scale.x) * scaleBlend;
     groupRef.current.scale.z += (bodyWidthTarget - groupRef.current.scale.z) * scaleBlend;
     groupRef.current.scale.y += (identityGeometry.bodyScaleY - groupRef.current.scale.y) * scaleBlend;
@@ -1329,16 +1338,31 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
       }
     }
 
-    // VRM.update 可能会重置标准骨骼，因此在其后应用用户已确认的克制身份几何。
-    // 当前生产模型没有完整的可编辑脸部 morph 库，先真实支持脸宽/脸长与体格比例；
-    // 其余拟合参数仍版本化保存，待未来替换为具备对应 morph 的模型后直接复用。
+    // VRM.update 可能会重置标准骨骼，因此在其后应用用户已确认的身份几何。
+    // 头部先抵消身体 group 的世界缩放，再叠加脸宽/脸长，保证体格与肩宽不会偷改脸。
     if (head) {
       const baseScale = initialScalesRef.current.get(head);
       if (baseScale) {
-        head.scale.x = baseScale.x * identityGeometry.headScaleX;
-        head.scale.y = baseScale.y * identityGeometry.headScaleY;
-        head.scale.z = baseScale.z;
+        const compensated = deriveCompensatedHeadLocalScale(identityGeometry, groupRef.current.scale);
+        head.scale.x = baseScale.x * compensated.x;
+        head.scale.y = baseScale.y * compensated.y;
+        head.scale.z = baseScale.z * compensated.z;
       }
+    }
+
+    // 肩宽使用真实肩骨横向位置；模型没有独立 shoulder bone 时回退到 upperArm 根节点。
+    // 只改变局部 X 位置，Y/Z 保持生产模型基线，避免把肩宽伪装成全身横向缩放。
+    const shoulderRoots = [
+      leftShoulder ?? leftUpperArm,
+      rightShoulder ?? rightUpperArm,
+    ];
+    for (const bone of shoulderRoots) {
+      if (!bone) continue;
+      const basePosition = initialPositionsRef.current.get(bone);
+      if (!basePosition) continue;
+      bone.position.x = basePosition.x * identityGeometry.shoulderSpread;
+      bone.position.y = basePosition.y;
+      bone.position.z = basePosition.z;
     }
 
     /* ───── 4. 非VRM模型眼球控制（VRM模型由lookAt系统自动控制） ───── */

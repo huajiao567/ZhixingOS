@@ -241,6 +241,7 @@ jobs:
           path: |
             e2e/test-results.json
             e2e/html-report/
+            e2e/mobile-screenshots/
             test-results/
           if-no-files-found: ignore
           retention-days: 7

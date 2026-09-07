@@ -28,6 +28,7 @@ import { StateExplainer } from '../avatar/StateExplainer';
 import { deleteTemporaryPhotoCopy, pickPhoto } from '../../services/mediaCapture';
 import { useAvatarV2Store } from '../store/useAvatarV2Store';
 import {
+  AVATAR_PERSONALIZATION_CAPABILITIES,
   personalizationDraftToProfile,
   type AvatarPersonalizationDraft,
 } from '../avatar/v2/avatarPersonalization';
@@ -228,8 +229,8 @@ export function Mirror3DEditor() {
     );
     await useStore.getState().addJournal([
       '[孪生] 用户确认更新三维形象',
-      '已应用：脸宽/脸长、体格/肩宽、肤色、发色与服装色。',
-      '已保存待后续模型支持：眼睛、眼距、眉形、鼻子、嘴部等精细参数。',
+      '已应用：脸宽/脸长、身体框架、肩骨宽度、肤色、发色与服装色。',
+      '已保存待后续模型支持：下颌、眼睛、眼距、眉形、鼻子、嘴部等精细参数。',
       '来源：用户在三维镜像编辑器中明确确认。',
     ].join('\n'), { sourceRef: 'avatar-editor', titlePrefix: '孪生记录' });
     useStore.getState().pushAudit('用户', '确认三维数字孪生身份与外观版本');
@@ -268,13 +269,13 @@ export function Mirror3DEditor() {
       updateIdentity(patch);
 
       const parts: string[] = [];
-      if (face) parts.push('脸型与五官');
+      if (face) parts.push('脸型（脸宽/脸长视觉生效，五官精细参数仅保存）');
       if (bodyApplied) {
         parts.push(body?.completeness.fullBody
-          ? '体格（肩宽与头身比）'
-          : '肩宽（半身照，头身比保持中性）');
+          ? '身体框架与肩宽'
+          : '肩宽（半身照，身体框架保持中性）');
       }
-      setPhotoHint(`已根据照片调整${parts.join('与')}，你可以继续微调。`);
+      setPhotoHint(`已根据照片调整${parts.join('与')}，你可以继续微调；只有标记为“预览生效”的参数会改变当前生产数字人。`);
 
       // 照片结果先只形成本地草稿；只有用户点击“保存到我的数字孪生”才进入正式身份版本。
       useStore.getState().pushAudit('用户', `本地照片生成三维形象草稿：${parts.join('、') || '无'}`);
@@ -320,12 +321,28 @@ export function Mirror3DEditor() {
   );
 
   const SignalSlider = ({
-    label, value, min, max, step, format, onValue,
-  }: { label: string; value: number; min: number; max: number; step: number; format: (v: number) => string; onValue: (v: number) => void }) => (
+    label, value, min, max, step, format, onValue, capabilityStatus, capabilityDescription,
+  }: {
+    label: string;
+    value: number;
+    min: number;
+    max: number;
+    step: number;
+    format: (v: number) => string;
+    onValue: (v: number) => void;
+    capabilityStatus?: '预览生效' | '当前仅保存';
+    capabilityDescription?: string;
+  }) => (
     <View style={{ marginBottom: theme.spacing.md }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: theme.spacing.xs }}>
-        <Text style={{ color: D.textPrimary, fontSize: theme.font.small, fontWeight: '600' }}>{label}</Text>
-        <Text style={{ color: D.teal, fontSize: theme.font.small }}>{format(value)}</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: theme.spacing.xs, alignItems: 'center' }}>
+        <Text style={{ color: D.textPrimary, fontSize: theme.font.small, fontWeight: '600', flexShrink: 1 }}>{label}</Text>
+        {capabilityStatus ? (
+          <Text style={{ color: capabilityStatus === '预览生效' ? D.teal : D.textTertiary, fontSize: theme.font.tiny, marginLeft: theme.spacing.sm }}>
+            {capabilityStatus}
+          </Text>
+        ) : (
+          <Text style={{ color: D.teal, fontSize: theme.font.small }}>{format(value)}</Text>
+        )}
       </View>
       <Slider
         minimumValue={min}
@@ -336,9 +353,14 @@ export function Mirror3DEditor() {
         minimumTrackTintColor={D.primary}
         maximumTrackTintColor={D.borderSoft}
         thumbTintColor="#fff"
-        accessibilityLabel={`${label}，当前值 ${format(value)}，范围 ${format(min)} 到 ${format(max)}`}
+        accessibilityLabel={`${label}，${capabilityStatus ? capabilityStatus + '，' : ''}当前值 ${format(value)}，范围 ${format(min)} 到 ${format(max)}`}
         accessibilityRole="adjustable"
       />
+      {capabilityDescription ? (
+        <Text style={{ color: D.textTertiary, fontSize: theme.font.tiny, lineHeight: 16, marginTop: 2 }}>
+          {capabilityDescription}
+        </Text>
+      ) : null}
     </View>
   );
 
@@ -588,18 +610,23 @@ export function Mirror3DEditor() {
               </Section>
 
               <Section title="脸部与体型">
-                {IDENTITY_CONTROLS.map((c) => (
-                  <SignalSlider
-                    key={c.key}
-                    label={c.label}
-                    value={identity[c.key] as number}
-                    min={0}
-                    max={1}
-                    step={0.02}
-                    format={() => ''}
-                    onValue={(v) => updateIdentity({ [c.key]: v } as Partial<IdentityLike>)}
-                  />
-                ))}
+                {IDENTITY_CONTROLS.map((c) => {
+                  const capability = AVATAR_PERSONALIZATION_CAPABILITIES[c.key];
+                  return (
+                    <SignalSlider
+                      key={c.key}
+                      label={c.label}
+                      value={identity[c.key] as number}
+                      min={0}
+                      max={1}
+                      step={0.02}
+                      format={(v) => v.toFixed(2)}
+                      capabilityStatus={capability.effect === 'rendered' ? '预览生效' : '当前仅保存'}
+                      capabilityDescription={capability.description}
+                      onValue={(v) => updateIdentity({ [c.key]: v } as Partial<IdentityLike>)}
+                    />
+                  );
+                })}
               </Section>
 
               <Section title="正式形象颜色">
@@ -646,7 +673,7 @@ export function Mirror3DEditor() {
                 </View>
 
                 <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, lineHeight: 18, marginTop: theme.spacing.md }}>
-                  当前页面直接预览正式 V2 VRM。已真实应用脸宽/脸长、体格/肩宽与肤色/发色/服装色；眼睛、眼距、眉形、鼻子和嘴部等参数会随身份版本保存，但当前生产模型缺少对应 morph，不会伪装成已生效。
+                  当前页面直接预览正式 V2 VRM。身体框架与肩宽已经与脸型解耦：肩宽走肩骨/上臂根节点，身体比例不会再连带改变脸宽。下颌、眼睛、眼距、眉形、鼻子和嘴部仍明确标为“当前仅保存”，不会伪装成已视觉生效。
                 </Text>
               </Section>
 

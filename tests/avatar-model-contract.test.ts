@@ -7,6 +7,13 @@ import { classifyAvatarMaterial } from '../src/mirror3d/avatar/v2/avatarPersonal
 interface GltfJson {
   materials?: { name?: string }[];
   meshes?: { name?: string; primitives?: { material?: number }[] }[];
+  extensions?: {
+    VRM?: {
+      humanoid?: {
+        humanBones?: { bone?: string; node?: number }[];
+      };
+    };
+  };
 }
 
 function parseGlbJson(path: string): GltfJson {
@@ -61,4 +68,21 @@ test('production AvatarSample_G exposes material names needed for safe runtime t
   assert.ok(roles.has('skin'), 'no confidently classified skin material; inspected: ' + inspected.join(' | '));
   assert.ok(roles.has('hair'), 'no confidently classified hair material; inspected: ' + inspected.join(' | '));
   assert.ok(roles.has('outfit'), 'no confidently classified outfit material; inspected: ' + inspected.join(' | '));
+});
+
+
+test('production AvatarSample_G exposes the humanoid bones required by real face/body separation', () => {
+  const gltf = parseGlbJson(resolve('public/avatar/AvatarSample_G.glb'));
+  const humanBones = gltf.extensions?.VRM?.humanoid?.humanBones ?? [];
+  const names = new Set(humanBones.map((entry) => entry.bone).filter(Boolean));
+
+  for (const required of ['head', 'leftUpperArm', 'rightUpperArm']) {
+    assert.ok(names.has(required), `production VRM missing required humanoid bone ${required}; found: ${[...names].join(', ')}`);
+  }
+
+  const hasDedicatedShoulders = names.has('leftShoulder') && names.has('rightShoulder');
+  assert.ok(
+    hasDedicatedShoulders || (names.has('leftUpperArm') && names.has('rightUpperArm')),
+    'production VRM must support shoulder spread through shoulder bones or upper-arm roots',
+  );
 });
