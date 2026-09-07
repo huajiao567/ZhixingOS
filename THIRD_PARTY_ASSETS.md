@@ -9,7 +9,7 @@ The repository MIT license does not replace the terms below. Only the two review
 - SHA-256: `AD5750CE944B708155ABB7AC6807E19D7F5E73A939F0EE32DAF0539ACFCA57C0`.
 - Embedded license: `licenseName=Other`; everyone may use it, including corporate and personal commercial use; modification and redistribution are allowed; credit is unnecessary. The complete condition URL is stored inside the model as `otherLicenseUrl`.
 - Reference: VRoid's v0.14.0 notes identify Victoria Rubin as AvatarSample_G and explain that later sample exports no longer use a blanket CC0 waiver. Accordingly, this project does not label the file CC0 and relies on its file-specific embedded VRM permissions.
-- Runtime modification: the file bytes are never rewritten. Framing, pose and lighting are applied at runtime; user-confirmed identity settings may also apply conservative bone-scale adjustments and non-destructive material color tints in memory. Original material colors are retained as the idempotent baseline.
+- Runtime modification: the file bytes are never rewritten. Framing, pose and lighting are applied at runtime; user-confirmed identity settings may also apply conservative head bone-scale adjustments, body-frame scaling, shoulder/upper-arm root position adjustments, and non-destructive material color tints in memory. Body scaling is compensated at the head so body/shoulder controls cannot silently change confirmed face proportions. Fine identity parameters without verified structural morphs remain stored-only. Original bone/material baselines are retained so the mapping is idempotent.
 
 ## `public/avatar/Mage.glb`
 
