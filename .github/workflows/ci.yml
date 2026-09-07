@@ -18,51 +18,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  repair-lockfiles:
-    name: Repair npm lockfiles on AI branches
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout branch head
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref_name }}
-
-      - name: Setup Node 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.23.2
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            backend/package-lock.json
-
-      - name: Reconcile lockfiles
-        if: github.event_name == 'push' && startsWith(github.ref_name, 'ai/')
-        shell: bash
-        run: |
-          npm install --package-lock-only --ignore-scripts
-          npm --prefix backend install --package-lock-only --ignore-scripts
-
-      - name: Commit repaired lockfiles when needed
-        if: github.event_name == 'push' && startsWith(github.ref_name, 'ai/')
-        shell: bash
-        run: |
-          if git diff --quiet -- package-lock.json backend/package-lock.json; then
-            echo "Lockfiles are already synchronized."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json backend/package-lock.json
-          git commit -m "chore: synchronize npm lockfiles"
-          git push origin HEAD:"${GITHUB_REF_NAME}"
-
   quality:
     name: Quality / ${{ matrix.os }}
-    needs: repair-lockfiles
     strategy:
       fail-fast: false
       matrix:
@@ -72,13 +29,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
-      - name: Checkout latest branch state
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref_name }}
+      - name: Checkout
+        uses: actions/checkout@v7
 
       - name: Setup Node 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22.23.2
           cache: npm
@@ -100,17 +55,14 @@ jobs:
 
   web-build:
     name: Desktop web production build
-    needs: repair-lockfiles
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout latest branch state
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref_name }}
+      - name: Checkout
+        uses: actions/checkout@v7
 
       - name: Setup Node 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22.23.2
           cache: npm
@@ -126,7 +78,7 @@ jobs:
         run: npm run build:web
 
       - name: Upload web artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zhixingos-web
           path: dist/
@@ -135,17 +87,14 @@ jobs:
 
   mobile-web-e2e:
     name: Mobile viewport E2E
-    needs: repair-lockfiles
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout latest branch state
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref_name }}
+      - name: Checkout
+        uses: actions/checkout@v7
 
       - name: Setup Node 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22.23.2
           cache: npm
@@ -199,7 +148,7 @@ jobs:
 
       - name: Upload E2E diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mobile-e2e-diagnostics
           path: |
