@@ -38,6 +38,9 @@ import type {
   TwinProfileRecord,
   ContinuityHandoffRecord,
   ContinuitySurface,
+  DeviceRecord,
+  DevicePlatform,
+  DeviceSurface,
 } from './types.js';
 
 let db: DatabaseSync;
@@ -397,6 +400,19 @@ CREATE TABLE IF NOT EXISTS continuity_handoffs (
   consumed_at TEXT,
   cancelled_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS device_registry (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  label TEXT NOT NULL,
+  surface TEXT NOT NULL,
+  platform TEXT NOT NULL,
+  app_version TEXT,
+  capabilities TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  revoked_at TEXT
+);
 `;
 
 function migrate(db: DatabaseSync) {
@@ -456,6 +472,7 @@ function migrate(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_life_objects_user_time ON life_objects(user_id, starts_at);
     CREATE INDEX IF NOT EXISTS idx_action_receipts_user_time ON action_receipts(user_id, executed_at DESC);
     CREATE INDEX IF NOT EXISTS idx_continuity_handoffs_target ON continuity_handoffs(user_id, target_surface, status, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_device_registry_user_seen ON device_registry(user_id, revoked_at, last_seen_at DESC);
   `);
 }
 
@@ -568,7 +585,7 @@ export function purgeUser(userId: string): void {
     'meta_principles', 'personal_model_versions', 'distillation_jobs', 'model_corrections',
     'source_permissions', 'service_contracts',
     // V4.8 AI-native 运行时
-    'life_objects', 'action_receipts', 'twin_profiles', 'continuity_handoffs',
+    'life_objects', 'action_receipts', 'twin_profiles', 'continuity_handoffs', 'device_registry',
     // Task 4.7: 密码重置令牌
     'password_reset_tokens',
     // V4.3 修复：刷新令牌表有 user_id FK，必须在删 users 前清空
@@ -759,6 +776,84 @@ export function upsertTwinProfile(userId: string, input: {
     WHERE excluded.version >= twin_profiles.version
   `).run(userId, input.version, JSON.stringify(input.doc), input.updatedAt);
   return { profile: getTwinProfile(userId), conflict: false };
+}
+
+function rowToDevice(row: any): DeviceRecord {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    label: row.label,
+    surface: row.surface,
+    platform: row.platform,
+    app_version: row.app_version ?? null,
+    capabilities: parseJson(row.capabilities, []),
+    created_at: row.created_at,
+    last_seen_at: row.last_seen_at,
+    revoked_at: row.revoked_at ?? null,
+  };
+}
+
+export function getDevice(userId: string, id: string): DeviceRecord | null {
+  const row = getDb().prepare(
+    'SELECT * FROM device_registry WHERE user_id = ? AND id = ?'
+  ).get(userId, id) as any;
+  return row ? rowToDevice(row) : null;
+}
+
+export function getDevices(userId: string, limit = 50): DeviceRecord[] {
+  const rows = getDb().prepare(
+    'SELECT * FROM device_registry WHERE user_id = ? AND revoked_at IS NULL ORDER BY last_seen_at DESC LIMIT ?'
+  ).all(userId, limit) as any[];
+  return rows.map(rowToDevice);
+}
+
+export function upsertDevice(userId: string, input: {
+  id: string;
+  label: string;
+  surface: DeviceSurface;
+  platform: DevicePlatform;
+  appVersion?: string | null;
+  capabilities: string[];
+  seenAt: string;
+}): DeviceRecord | null {
+  getDb().prepare(`
+    INSERT INTO device_registry
+      (id, user_id, label, surface, platform, app_version, capabilities, created_at, last_seen_at, revoked_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+    ON CONFLICT(id) DO UPDATE SET
+      label = excluded.label,
+      surface = excluded.surface,
+      platform = excluded.platform,
+      app_version = excluded.app_version,
+      capabilities = excluded.capabilities,
+      last_seen_at = excluded.last_seen_at,
+      revoked_at = NULL
+    WHERE device_registry.user_id = excluded.user_id
+  `).run(
+    input.id, userId, input.label, input.surface, input.platform,
+    input.appVersion ?? null, JSON.stringify(input.capabilities), input.seenAt, input.seenAt,
+  );
+  return getDevice(userId, input.id);
+}
+
+export function heartbeatDevice(userId: string, id: string, at: string): DeviceRecord | null {
+  const result = getDb().prepare(`
+    UPDATE device_registry
+    SET last_seen_at = ?
+    WHERE user_id = ? AND id = ? AND revoked_at IS NULL
+  `).run(at, userId, id);
+  if (Number(result.changes) !== 1) return null;
+  return getDevice(userId, id);
+}
+
+export function revokeDevice(userId: string, id: string, at: string): DeviceRecord | null {
+  const current = getDevice(userId, id);
+  if (!current) return null;
+  if (current.revoked_at) return current;
+  getDb().prepare(
+    'UPDATE device_registry SET revoked_at = ? WHERE user_id = ? AND id = ? AND revoked_at IS NULL'
+  ).run(at, userId, id);
+  return getDevice(userId, id);
 }
 
 function rowToContinuityHandoff(row: any): ContinuityHandoffRecord {
