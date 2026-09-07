@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { actionReceiptSchema, continuityHandoffSchema, lifeObjectSchema, twinProfileSchema } from '../src/routes/runtime';
+import { actionReceiptSchema, continuityHandoffSchema, deviceRegistrationSchema, lifeObjectSchema, twinProfileSchema } from '../src/routes/runtime';
 
 const now = '2026-08-22T01:00:00.000Z';
 
@@ -49,4 +49,19 @@ test('continuity handoff contract is cross-surface, bounded and traceable', () =
   assert.equal(continuityHandoffSchema.safeParse({ ...base, targetSurface: 'desktop' }).success, false);
   assert.equal(continuityHandoffSchema.safeParse({ ...base, payload: { kind: 'workspace_text' } }).success, false);
   assert.equal(continuityHandoffSchema.safeParse({ ...base, expiresAt: '2026-08-22T00:00:00.000Z' }).success, false);
+});
+
+test('device registration contract stores capabilities without hardware identifiers', () => {
+  const base = {
+    id: 'device-test-0001',
+    label: 'Chrome 桌面',
+    surface: 'desktop',
+    platform: 'web',
+    appVersion: '1.0.0',
+    capabilities: ['keyboard', 'web'],
+  };
+  assert.equal(deviceRegistrationSchema.safeParse(base).success, true);
+  assert.equal(deviceRegistrationSchema.safeParse({ ...base, id: 'short' }).success, false);
+  assert.equal(deviceRegistrationSchema.safeParse({ ...base, platform: 'windows-x64-serial' }).success, false);
+  assert.equal(deviceRegistrationSchema.safeParse({ ...base, capabilities: Array.from({ length: 33 }, (_, i) => `c${i}`) }).success, false);
 });
