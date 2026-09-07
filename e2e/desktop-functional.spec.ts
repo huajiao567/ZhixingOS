@@ -54,6 +54,6 @@ test.describe('1440px 电脑端工作台', () => {
     await expect(page.getByText('电脑端工作台', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: '进程', exact: true }).click();
-    await expect(page.getByText('进程', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('从意义到能力、项目与实验 —— 每一步都要有现实证据', { exact: true })).toBeVisible();
   });
 });
