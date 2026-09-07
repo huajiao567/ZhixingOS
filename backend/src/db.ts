@@ -36,6 +36,8 @@ import type {
   LifeObjectRecord,
   ActionReceiptRecord,
   TwinProfileRecord,
+  ContinuityHandoffRecord,
+  ContinuitySurface,
 } from './types.js';
 
 let db: DatabaseSync;
@@ -381,6 +383,20 @@ CREATE TABLE IF NOT EXISTS twin_profiles (
   doc TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS continuity_handoffs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  source_surface TEXT NOT NULL,
+  target_surface TEXT NOT NULL,
+  title TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  consumed_at TEXT,
+  cancelled_at TEXT
+);
 `;
 
 function migrate(db: DatabaseSync) {
@@ -439,6 +455,7 @@ function migrate(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_life_objects_user_status ON life_objects(user_id, status, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_life_objects_user_time ON life_objects(user_id, starts_at);
     CREATE INDEX IF NOT EXISTS idx_action_receipts_user_time ON action_receipts(user_id, executed_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_continuity_handoffs_target ON continuity_handoffs(user_id, target_surface, status, created_at DESC);
   `);
 }
 
@@ -551,7 +568,7 @@ export function purgeUser(userId: string): void {
     'meta_principles', 'personal_model_versions', 'distillation_jobs', 'model_corrections',
     'source_permissions', 'service_contracts',
     // V4.8 AI-native 运行时
-    'life_objects', 'action_receipts', 'twin_profiles',
+    'life_objects', 'action_receipts', 'twin_profiles', 'continuity_handoffs',
     // Task 4.7: 密码重置令牌
     'password_reset_tokens',
     // V4.3 修复：刷新令牌表有 user_id FK，必须在删 users 前清空
@@ -742,6 +759,87 @@ export function upsertTwinProfile(userId: string, input: {
     WHERE excluded.version >= twin_profiles.version
   `).run(userId, input.version, JSON.stringify(input.doc), input.updatedAt);
   return { profile: getTwinProfile(userId), conflict: false };
+}
+
+function rowToContinuityHandoff(row: any): ContinuityHandoffRecord {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    source_surface: row.source_surface,
+    target_surface: row.target_surface,
+    title: row.title,
+    payload: parseJson(row.payload, { kind: 'workspace_text' }),
+    status: row.status,
+    created_at: row.created_at,
+    expires_at: row.expires_at,
+    consumed_at: row.consumed_at ?? null,
+    cancelled_at: row.cancelled_at ?? null,
+  };
+}
+
+export function getContinuityHandoff(userId: string, id: string): ContinuityHandoffRecord | null {
+  const row = getDb().prepare(
+    'SELECT * FROM continuity_handoffs WHERE user_id = ? AND id = ?'
+  ).get(userId, id) as any;
+  return row ? rowToContinuityHandoff(row) : null;
+}
+
+export function getContinuityHandoffs(
+  userId: string,
+  targetSurface: ContinuitySurface,
+  limit = 20,
+): ContinuityHandoffRecord[] {
+  const now = new Date().toISOString();
+  const rows = getDb().prepare(`
+    SELECT * FROM continuity_handoffs
+    WHERE user_id = ? AND target_surface = ? AND status = 'open' AND expires_at > ?
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(userId, targetSurface, now, limit) as any[];
+  return rows.map(rowToContinuityHandoff);
+}
+
+export function createContinuityHandoff(userId: string, input: {
+  id: string;
+  sourceSurface: ContinuitySurface;
+  targetSurface: ContinuitySurface;
+  title: string;
+  payload: ContinuityHandoffRecord['payload'];
+  createdAt: string;
+  expiresAt: string;
+}): ContinuityHandoffRecord | null {
+  getDb().prepare(`
+    INSERT OR IGNORE INTO continuity_handoffs
+      (id, user_id, source_surface, target_surface, title, payload, status, created_at, expires_at, consumed_at, cancelled_at)
+    VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, NULL, NULL)
+  `).run(
+    input.id, userId, input.sourceSurface, input.targetSurface, input.title,
+    JSON.stringify(input.payload), input.createdAt, input.expiresAt,
+  );
+  return getContinuityHandoff(userId, input.id);
+}
+
+export function consumeContinuityHandoff(userId: string, id: string, at: string): ContinuityHandoffRecord | null {
+  const result = getDb().prepare(`
+    UPDATE continuity_handoffs
+    SET status = 'consumed', consumed_at = ?
+    WHERE user_id = ? AND id = ? AND status = 'open' AND expires_at > ?
+  `).run(at, userId, id, at);
+  if (Number(result.changes) !== 1) return null;
+  return getContinuityHandoff(userId, id);
+}
+
+export function cancelContinuityHandoff(userId: string, id: string, at: string): ContinuityHandoffRecord | null {
+  const current = getContinuityHandoff(userId, id);
+  if (!current) return null;
+  if (current.status === 'cancelled') return current;
+  if (current.status !== 'open') return null;
+  getDb().prepare(`
+    UPDATE continuity_handoffs
+    SET status = 'cancelled', cancelled_at = ?
+    WHERE user_id = ? AND id = ? AND status = 'open'
+  `).run(at, userId, id);
+  return getContinuityHandoff(userId, id);
 }
 
 // ---------- Evidence 证据记录（V4.3 §4.4） ----------

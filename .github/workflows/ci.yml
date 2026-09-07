@@ -86,7 +86,7 @@ jobs:
           retention-days: 7
 
   desktop-web-e2e:
-    name: Desktop workbench E2E
+    name: Desktop + continuity E2E
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -145,6 +145,11 @@ jobs:
         env:
           WEB_BASE: http://localhost:8081
         run: npm run test:desktop
+
+      - name: Run bidirectional continuity tests
+        env:
+          WEB_BASE: http://localhost:8081
+        run: npm run test:continuity
 
       - name: Upload desktop E2E diagnostics
         if: always()

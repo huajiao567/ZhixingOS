@@ -80,7 +80,8 @@
     "doctor": "npx expo-doctor",
     "audit:open-source": "powershell -ExecutionPolicy Bypass -File scripts/open-source-audit.ps1",
     "check": "npm test && npm run test:backend && npm run typecheck && npm --prefix backend run typecheck && npm run lint",
-    "test:desktop": "playwright test e2e/desktop-functional.spec.ts --project=chromium --reporter=list"
+    "test:desktop": "playwright test e2e/desktop-functional.spec.ts --project=chromium --reporter=list",
+    "test:continuity": "playwright test e2e/continuity-functional.spec.ts --project=chromium --reporter=list"
   },
   "private": true
 }

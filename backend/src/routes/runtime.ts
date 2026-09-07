@@ -8,6 +8,10 @@ import {
   getLifeObject,
   getLifeObjects,
   getTwinProfile,
+  getContinuityHandoffs,
+  createContinuityHandoff,
+  consumeContinuityHandoff,
+  cancelContinuityHandoff,
   markActionReceiptUndone,
   saveActionReceipt,
   upsertLifeObject,
@@ -73,6 +77,31 @@ export const twinProfileSchema = z.object({
   evidence: z.array(z.record(z.string(), z.unknown())).max(5000),
   archivedTraits: z.array(z.record(z.string(), z.unknown())).max(2000),
   updatedAt: isoDate,
+});
+
+export const continuityHandoffSchema = z.object({
+  id: z.string().min(1).max(200),
+  sourceSurface: z.enum(['desktop', 'mobile']),
+  targetSurface: z.enum(['desktop', 'mobile']),
+  title: z.string().trim().min(1).max(500),
+  payload: z.object({
+    kind: z.enum(['workspace_text', 'life_object']),
+    text: z.string().trim().min(1).max(10_000).optional(),
+    route: z.enum(['Workspace', 'Progress', 'Mirror', 'Secretary']).optional(),
+    objectIds: z.array(z.string().min(1).max(200)).max(100).optional(),
+  }),
+  createdAt: isoDate,
+  expiresAt: isoDate,
+}).superRefine((value, ctx) => {
+  if (value.sourceSurface === value.targetSurface) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: '来源端与目标端必须不同', path: ['targetSurface'] });
+  }
+  if (Date.parse(value.expiresAt) <= Date.parse(value.createdAt)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'expiresAt 必须晚于 createdAt', path: ['expiresAt'] });
+  }
+  if (value.payload.kind === 'workspace_text' && !value.payload.text) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'workspace_text 必须包含 text', path: ['payload', 'text'] });
+  }
 });
 
 function userId(req: unknown): string {
@@ -149,6 +178,56 @@ runtimeRouter.post('/action-receipts/:id/undo', (req, res) => {
   if (!stored) { res.status(409).json({ error: '回执不存在或当前状态不可标记为已撤销' }); return; }
   audit(userId(req), 'action_receipt.undo', { id: stored.id });
   res.json(stored.doc);
+});
+
+runtimeRouter.get('/continuity-handoffs', (req, res) => {
+  const target = z.enum(['desktop', 'mobile']).safeParse(req.query.target);
+  if (!target.success) { res.status(400).json({ error: 'target 必须为 desktop 或 mobile' }); return; }
+  res.json({ items: getContinuityHandoffs(userId(req), target.data, limit(req.query.limit, 20)), nextCursor: null });
+});
+
+runtimeRouter.post('/continuity-handoffs', (req, res) => {
+  const parsed = continuityHandoffSchema.safeParse(req.body ?? {});
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? '参数错误' }); return; }
+  const handoff = parsed.data;
+  const maxTtlMs = 7 * 24 * 60 * 60 * 1000;
+  if (Date.parse(handoff.expiresAt) - Date.parse(handoff.createdAt) > maxTtlMs) {
+    res.status(400).json({ error: '接力最长保留 7 天' });
+    return;
+  }
+  const stored = createContinuityHandoff(userId(req), {
+    id: handoff.id,
+    sourceSurface: handoff.sourceSurface,
+    targetSurface: handoff.targetSurface,
+    title: handoff.title,
+    payload: handoff.payload,
+    createdAt: handoff.createdAt,
+    expiresAt: handoff.expiresAt,
+  });
+  if (!stored) { res.status(409).json({ error: '接力记录创建失败' }); return; }
+  audit(userId(req), 'continuity_handoff.create', {
+    id: stored.id,
+    sourceSurface: stored.source_surface,
+    targetSurface: stored.target_surface,
+    kind: stored.payload.kind,
+  });
+  res.status(201).json(stored);
+});
+
+runtimeRouter.post('/continuity-handoffs/:id/consume', (req, res) => {
+  const at = new Date().toISOString();
+  const stored = consumeContinuityHandoff(userId(req), req.params.id, at);
+  if (!stored) { res.status(409).json({ error: '接力不存在、已处理或已过期' }); return; }
+  audit(userId(req), 'continuity_handoff.consume', { id: stored.id, targetSurface: stored.target_surface });
+  res.json(stored);
+});
+
+runtimeRouter.post('/continuity-handoffs/:id/cancel', (req, res) => {
+  const at = new Date().toISOString();
+  const stored = cancelContinuityHandoff(userId(req), req.params.id, at);
+  if (!stored) { res.status(409).json({ error: '接力不存在或当前状态不可取消' }); return; }
+  audit(userId(req), 'continuity_handoff.cancel', { id: stored.id });
+  res.json(stored);
 });
 
 runtimeRouter.get('/twin-profile', (req, res) => {

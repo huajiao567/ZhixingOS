@@ -8,6 +8,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { ContextSurfaceView } from '../../components/workspace/ContextSurfaceView';
@@ -15,6 +16,8 @@ import { Glyph } from '../../components/glyphs';
 import { useSecretaryRuntime } from '../../hooks/useSecretaryRuntime';
 import { useAuth } from '../../services/auth';
 import { useAppTheme } from '../../theme/theme';
+import { classifyFormFactor } from '../../platform/formFactor';
+import { sendWorkspaceHandoff } from '../../hooks/useContinuityHandoffs';
 
 const EXAMPLES = [
   '记得明天上午9点买牛奶',
@@ -29,7 +32,12 @@ export function WorkspaceScreen() {
   const route = useRoute<any>();
   const auth = useAuth();
   const runtime = useSecretaryRuntime(auth.userId);
+  const { width } = useWindowDimensions();
+  const surface = classifyFormFactor({ width, platform: Platform.OS });
+  const handoffTarget = surface === 'desktop' ? 'mobile' : 'desktop';
   const [input, setInput] = useState('');
+  const [handoffBusy, setHandoffBusy] = useState(false);
+  const [handoffMessage, setHandoffMessage] = useState<string | null>(null);
   const initialHandled = useRef(false);
   const needsAnswer = runtime.state.phase === 'needs_input';
 
@@ -47,6 +55,27 @@ export function WorkspaceScreen() {
     setInput('');
     if (needsAnswer) await runtime.answer(text);
     else await runtime.analyze(text);
+  };
+
+  const handoff = async () => {
+    const text = input.trim();
+    if (!text || handoffBusy) return;
+    setHandoffBusy(true);
+    setHandoffMessage(null);
+    try {
+      await sendWorkspaceHandoff(
+        surface,
+        handoffTarget,
+        text,
+        `从${surface === 'desktop' ? '电脑' : '手机'}继续：${text.slice(0, 48)}`,
+      );
+      setInput('');
+      setHandoffMessage(`已发送到${handoffTarget === 'desktop' ? '电脑' : '手机'}，24 小时内可继续`);
+    } catch (error) {
+      setHandoffMessage(error instanceof Error ? error.message : '跨端接力发送失败');
+    } finally {
+      setHandoffBusy(false);
+    }
   };
 
   return (
@@ -100,6 +129,12 @@ export function WorkspaceScreen() {
         ) : null}
       </ScrollView>
 
+      {handoffMessage ? (
+        <View style={[styles.handoffNotice, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.borderSoft }]}>
+          <Text style={{ color: theme.colors.textSecondary, fontSize: theme.font.tiny }}>{handoffMessage}</Text>
+        </View>
+      ) : null}
+
       {runtime.state.phase !== 'executing' && runtime.state.phase !== 'parsing' ? (
         <View style={[styles.composer, { borderColor: theme.colors.borderSoft, backgroundColor: theme.colors.surface }]}>
           <TextInput
@@ -112,6 +147,15 @@ export function WorkspaceScreen() {
             multiline
             accessibilityLabel={needsAnswer ? '补充信息' : '工作台输入'}
           />
+          <Pressable
+            onPress={handoff}
+            disabled={!input.trim() || handoffBusy}
+            style={[styles.send, { backgroundColor: input.trim() ? theme.colors.surfaceAlt : theme.colors.surfaceAlt, opacity: handoffBusy ? 0.5 : 1 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`发送到${handoffTarget === 'desktop' ? '电脑' : '手机'}继续`}
+          >
+            <Glyph name="layers" size={17} color={input.trim() ? theme.colors.primary : theme.colors.textTertiary} />
+          </Pressable>
           <Pressable
             onPress={submit}
             disabled={!input.trim()}
@@ -136,5 +180,6 @@ const styles = StyleSheet.create({
   example: { minHeight: 50, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   composer: { borderTopWidth: 1, padding: 10, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
   input: { flex: 1, minHeight: 48, maxHeight: 112, paddingHorizontal: 14, paddingVertical: 12, textAlignVertical: 'top' },
-  send: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  send: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 10, flexShrink: 0 },
+  handoffNotice: { borderTopWidth: 1, paddingVertical: 7, paddingHorizontal: 16, alignItems: 'center' },
 });

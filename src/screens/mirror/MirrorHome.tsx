@@ -25,6 +25,7 @@ import { pickPhoto, takePhoto, useAudioCapture } from '../../services/mediaCaptu
 import { assertEnvelopeTraceable, createPhotoEnvelope } from '../../ai-native/intake/eventEnvelope';
 import { extractSelfReportedLifeSignals } from '../../ai-native/connectors/selfReportSignals';
 import { useLifeSignalStore } from '../../ai-native/connectors/useLifeSignalStore';
+import { ContinuityInboxCard } from '../../components/ContinuityInboxCard';
 
 type MirrorType = 'emotion' | 'health' | 'planning';
 
@@ -673,6 +674,27 @@ export function MirrorHome() {
             </Pressable>
           </View>
         </View>
+      </View>
+
+      <View
+        style={{
+          marginHorizontal: isCompactPhone ? 16 : (isTablet ? 20 : 16),
+          marginTop: 8,
+          zIndex: 2,
+        }}
+      >
+        <ContinuityInboxCard
+          target="mobile"
+          compact
+          hideWhenEmpty
+          onContinue={(handoff) => {
+            const routeName = handoff.payload.route ?? 'Workspace';
+            navigation.navigate(
+              routeName,
+              handoff.payload.text ? { initialText: handoff.payload.text } : undefined,
+            );
+          }}
+        />
       </View>
 
       {/* 中段：手机为完整舞台 + 下方摘要；宽屏保留左右结构。 */}
