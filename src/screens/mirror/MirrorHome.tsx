@@ -979,10 +979,10 @@ const styles = StyleSheet.create({
   inhaleParticle: { position: 'absolute' },
   /* 记录栏 */
   recordBar: { zIndex: 2 },
-  recordRow: { flexDirection: 'row', alignItems: 'center' },
-  recordBtn: { borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
-  textInputWrapper: { flexDirection: 'row', alignItems: 'center' },
-  textInput: { flex: 1, fontWeight: '400' },
+  recordRow: { flexDirection: 'row', alignItems: 'center', width: '100%', minWidth: 0 },
+  recordBtn: { borderRadius: 999, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  textInputWrapper: { flexDirection: 'row', alignItems: 'center', minWidth: 0, flexShrink: 1 },
+  textInput: { flex: 1, minWidth: 0, fontWeight: '400' },
   /* 语音覆盖层 */
   voiceOverlay: { position: 'absolute', left: 16, right: 16, padding: 16, borderWidth: 0, zIndex: 11, gap: 12, borderRadius: 24 },
   voHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
