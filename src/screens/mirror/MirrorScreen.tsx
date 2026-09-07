@@ -13,6 +13,7 @@ import { EvidenceLevel } from '../../types/models';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { Mirror3DPanel } from '../../mirror3d/integration';
 import { api, type WeeklyBriefResponse, type MonthlyBriefResponse } from '../../services/api';
+import { journalSourceLabel } from '../../ai-native/intake/journalRecord';
 
 type Tab = 'hypotheses' | 'timeline' | 'state' | 'weekly' | 'monthly';
 
@@ -339,7 +340,9 @@ export function MirrorScreen() {
                     「{e.userInterpretation}」
                   </Text>
                 )}
-                <Text style={[ts.tertiary, { marginTop: theme.spacing.xs }]}>来源：{e.sourceRef} · {e.confidence >= 0.7 ? '来源较可靠' : e.confidence >= 0.4 ? '来源仅供参考' : '来源待核实'}</Text>
+                <Text style={[ts.tertiary, { marginTop: theme.spacing.xs }]}>
+                  来源：{e.type === 'journal' ? journalSourceLabel(e.sourceRef) : e.sourceRef} · {e.confidence >= 0.7 ? '来源较可靠' : e.confidence >= 0.4 ? '来源仅供参考' : '来源待核实'}
+                </Text>
               </Card>
             ))}
           </View>
