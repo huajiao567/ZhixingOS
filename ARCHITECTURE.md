@@ -13,6 +13,7 @@ ZhixingOS is designed around seven invariants:
 7. Recalled memory is private, source-linked, versioned, budgeted and treated as data rather than prompt instructions.
 8. A device connector reports honest availability and emits only normalized, source-linked observations; it never edits the avatar directly.
 9. Adaptive appearance is temporary, bounded and reversible, and cannot overwrite identity, personality or user-confirmed appearance.
+10. Cross-device continuity is an explicit user-scoped handoff object with a target surface, TTL and consumption state; shared storage is never presented as implicit clipboard or background transfer.
 
 ## Runtime layers
 
@@ -28,6 +29,7 @@ ZhixingOS is designed around seven invariants:
 | Memory recall | Project governed records into L0-L3 assets and retrieve under explicit budgets | `backend/src/services/memoryRetrieval.ts` |
 | Life-data connectors | Normalize wearable, phone, desktop and food signals behind explicit platform boundaries | `src/ai-native/connectors` |
 | Adaptive appearance | Apply confidence, continuity, expiry and user-priority gates before VRM rendering | `src/mirror3d/avatar/v2/adaptiveAppearance.ts` |
+| Device continuity | Create, discover, consume and cancel explicit desktop/mobile handoffs | `src/hooks/useContinuityHandoffs.ts`, `src/components/ContinuityInboxCard.tsx`, `backend/src/routes/runtime.ts` |
 
 The domain layer has no React Native imports and is covered by Node tests. Platform adapters implement calendars, media, local storage and HTTP. Screens render state but do not decide whether a write succeeded.
 
@@ -38,6 +40,7 @@ The Express backend uses Node's built-in SQLite driver. Existing document tables
 - `life_objects`: versioned object snapshots.
 - `action_receipts`: unique per-user idempotency keys and complete step results.
 - `twin_profiles`: current profile snapshot and version.
+- `continuity_handoffs`: user-scoped cross-device work continuation with source/target surface, bounded payload, TTL and open/consumed/cancelled lifecycle.
 
 These tables participate in export and account deletion. All runtime routes are authenticated and scope queries by `user_id`.
 
@@ -66,6 +69,7 @@ They produce reasons and evidence gaps, never luck, fate or personality scores.
 - Third-party model files retain their own license and provenance.
 - Raw phone/desktop events, window titles, URLs and food-photo pixels remain outside the avatar domain; only confirmed aggregates cross the connector boundary.
 - A missing native module, entitlement, companion or regional service is an explicit unavailable state, never a simulated success.
+- Continuity handoffs contain only the bounded payload the user explicitly sends; no implementation may infer that a shared database, browser session or clipboard constitutes a completed transfer.
 
 ## Life-data adaptation
 
