@@ -1,0 +1,167 @@
+name: Cross-platform CI
+
+on:
+  push:
+    branches:
+      - master
+      - "ai/**"
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zhixingos-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.1
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        run: npm --prefix backend ci
+
+      - name: Run quality gates
+        run: npm run check
+
+      - name: Build backend
+        run: npm --prefix backend run build
+
+  web-build:
+    name: Desktop web production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.1
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Export web production bundle
+        env:
+          CI: "1"
+          EXPO_PUBLIC_API_BASE: http://127.0.0.1:3001
+        run: npm run build:web
+
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zhixingos-web
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  mobile-web-e2e:
+    name: Mobile viewport E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.1
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix backend ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare test environment
+        shell: bash
+        run: |
+          cp .env.example .env.local
+          cp backend/.env.example backend/.env
+          sed -i 's/^JWT_SECRET=.*/JWT_SECRET=ci-only-secret-0123456789abcdef0123456789abcdef/' backend/.env
+
+      - name: Start backend and Expo web
+        shell: bash
+        env:
+          CI: "1"
+          EXPO_PUBLIC_API_BASE: http://127.0.0.1:3001
+        run: |
+          npm --prefix backend run dev > /tmp/zhixingos-backend.log 2>&1 &
+          npx expo start --web --port 8081 > /tmp/zhixingos-web.log 2>&1 &
+
+          for i in {1..90}; do
+            if curl -fsS http://127.0.0.1:8081 >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Expo web did not become ready in time."
+          echo "===== backend ====="
+          cat /tmp/zhixingos-backend.log || true
+          echo "===== expo web ====="
+          cat /tmp/zhixingos-web.log || true
+          exit 1
+
+      - name: Run mobile functional tests
+        env:
+          WEB_BASE: http://127.0.0.1:8081
+        run: npm run test:mobile
+
+      - name: Upload E2E diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-e2e-diagnostics
+          path: |
+            e2e/test-results.json
+            e2e/html-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Print service logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "===== backend ====="
+          cat /tmp/zhixingos-backend.log || true
+          echo "===== expo web ====="
+          cat /tmp/zhixingos-web.log || true
