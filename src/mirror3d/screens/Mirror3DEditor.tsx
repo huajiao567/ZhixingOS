@@ -391,6 +391,7 @@ export function Mirror3DEditor() {
                 opacity: pressed ? 0.6 : 1,
               })}
               accessibilityLabel="关闭"
+              accessibilityRole="button"
               hitSlop={12}
             >
               <Text style={{ color: D.textPrimary, fontSize: 28, fontWeight: '300', lineHeight: 30 }}>×</Text>
