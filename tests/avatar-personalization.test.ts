@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createDefaultAvatarProfile } from '../src/mirror3d/avatar/v2/avatarTypes';
 import {
+  AVATAR_PERSONALIZATION_CAPABILITIES,
   deriveAvatarIdentityGeometry,
+  deriveCompensatedHeadLocalScale,
   nextIdentityVersion,
   personalizationDraftToProfile,
   safeAppearanceColor,
@@ -33,7 +35,7 @@ test('personalization draft updates only explicit identity and appearance fields
   assert.equal(next.dailyState, base.dailyState);
 });
 
-test('production geometry stays within conservative deformation bounds', () => {
+test('production geometry keeps face, body frame and shoulder channels separate', () => {
   const base = createDefaultAvatarProfile('2026-09-07T00:00:00.000Z');
   const low = {
     ...base,
@@ -43,8 +45,49 @@ test('production geometry stays within conservative deformation bounds', () => {
     ...base,
     identity: { ...base.identity, faceMorphs: { faceWidth: 1, faceHeight: 1 }, bodyMorphs: { bodyScale: 1, shoulderWidth: 1 } },
   };
-  assert.deepEqual(deriveAvatarIdentityGeometry(low), { headScaleX: 0.94, headScaleY: 0.95, bodyScaleX: 0.97, bodyScaleY: 0.98 });
-  assert.deepEqual(deriveAvatarIdentityGeometry(high), { headScaleX: 1.06, headScaleY: 1.05, bodyScaleX: 1.03, bodyScaleY: 1.02 });
+  assert.deepEqual(deriveAvatarIdentityGeometry(low), {
+    headScaleX: 0.94,
+    headScaleY: 0.95,
+    bodyScaleXZ: 0.96,
+    bodyScaleY: 0.99,
+    shoulderSpread: 0.94,
+  });
+  assert.deepEqual(deriveAvatarIdentityGeometry(high), {
+    headScaleX: 1.06,
+    headScaleY: 1.05,
+    bodyScaleXZ: 1.04,
+    bodyScaleY: 1.01,
+    shoulderSpread: 1.06,
+  });
+});
+
+test('head compensation prevents body scale from changing confirmed face world scale', () => {
+  const base = createDefaultAvatarProfile('2026-09-07T00:00:00.000Z');
+  const profile = {
+    ...base,
+    identity: {
+      ...base.identity,
+      faceMorphs: { faceWidth: 0.9, faceHeight: 0.2 },
+      bodyMorphs: { bodyScale: 1, shoulderWidth: 1 },
+    },
+  };
+  const geometry = deriveAvatarIdentityGeometry(profile);
+  const bodyWorldScale = { x: geometry.bodyScaleXZ * 1.03, y: geometry.bodyScaleY, z: geometry.bodyScaleXZ * 1.03 };
+  const local = deriveCompensatedHeadLocalScale(geometry, bodyWorldScale);
+
+  assert.ok(Math.abs(local.x * bodyWorldScale.x - geometry.headScaleX) < 1e-12);
+  assert.ok(Math.abs(local.y * bodyWorldScale.y - geometry.headScaleY) < 1e-12);
+  assert.ok(Math.abs(local.z * bodyWorldScale.z - 1) < 1e-12);
+});
+
+test('production personalization capability contract is explicit about rendered versus stored-only fields', () => {
+  for (const field of ['faceWidth', 'faceHeight', 'bodyScale', 'shoulderWidth', 'skinTone', 'hairColor', 'outfitColor'] as const) {
+    assert.equal(AVATAR_PERSONALIZATION_CAPABILITIES[field].effect, 'rendered', field);
+  }
+  for (const field of ['jawRoundness', 'eyeSize', 'eyeSpacing', 'browAngle', 'noseSize', 'mouthWidth'] as const) {
+    assert.equal(AVATAR_PERSONALIZATION_CAPABILITIES[field].effect, 'stored-only', field);
+    assert.equal(AVATAR_PERSONALIZATION_CAPABILITIES[field].channel, 'stored-only', field);
+  }
 });
 
 test('identity version increments only the patch component', () => {
