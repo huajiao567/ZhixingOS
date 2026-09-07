@@ -34,7 +34,6 @@ import {
 
 type Tab = 'mirror' | 'state' | 'identity' | 'data';
 
-const HAIR_LABEL: Record<HairStyle, string> = { short: '短发', round: '圆润', side: '侧分', long: '长发', twin: '双马尾', tails: '双马尾(低)', ponytail: '马尾', bun: '丸子头' };
 const SKIN_TONES = ['#F8D1B0', '#F0B98E', '#D9996C', '#B87551', '#8D563E'];
 const HAIR_COLORS = ['#14161B', '#3B2A23', '#6C4932', '#8B735A'];
 const SHIRT_COLORS: { c: string; n: string }[] = [
@@ -43,7 +42,6 @@ const SHIRT_COLORS: { c: string; n: string }[] = [
   { c: '#A768B8', n: '紫藤' },
   { c: '#C77B43', n: '暖橙' },
 ];
-const shirtName = (c: string) => SHIRT_COLORS.find((x) => x.c === c)?.n ?? '基础色';
 
 const signalLevel = (v: number): string => {
   if (v < 0.2) return '很低';
@@ -83,8 +81,10 @@ const SIGNAL_CONTROLS: {
 const IDENTITY_CONTROLS: { key: keyof IdentityLike; label: string }[] = [
   { key: 'faceWidth', label: '脸宽' },
   { key: 'faceHeight', label: '脸长' },
+  { key: 'jawRoundness', label: '下颌圆润度' },
   { key: 'eyeSize', label: '眼睛大小' },
   { key: 'eyeSpacing', label: '眼距' },
+  { key: 'browAngle', label: '眉形角度' },
   { key: 'noseSize', label: '鼻子大小' },
   { key: 'mouthWidth', label: '嘴宽' },
   { key: 'bodyScale', label: '身体比例' },
@@ -97,8 +97,8 @@ type DailySignalsLike = {
   projectMomentum: number; scheduleLoad: number; diary: string;
 };
 type IdentityLike = {
-  faceWidth: number; faceHeight: number; eyeSize: number; eyeSpacing: number;
-  noseSize: number; mouthWidth: number; bodyScale: number; shoulderWidth: number;
+  faceWidth: number; faceHeight: number; jawRoundness: number; eyeSize: number; eyeSpacing: number;
+  browAngle: number; noseSize: number; mouthWidth: number; bodyScale: number; shoulderWidth: number;
 };
 
 export function Mirror3DEditor() {
