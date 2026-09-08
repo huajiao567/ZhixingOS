@@ -1,5 +1,40 @@
 import type { AvatarProfileV2 } from './avatarTypes';
 
+export type AvatarPersonalizationInputMode = 'manual' | 'photo_assisted';
+
+export interface AvatarPersonalizationProvenance {
+  mode: AvatarPersonalizationInputMode;
+  /**
+   * Opaque local evidence receipts only. Raw file/content/blob/data/http URIs
+   * are never allowed into the persisted Avatar profile or Timeline.
+   */
+  sourceRefs?: string[];
+}
+
+export interface NormalizedAvatarPersonalizationProvenance {
+  mode: AvatarPersonalizationInputMode;
+  sourceRefs: string[];
+}
+
+const SAFE_PERSONALIZATION_SOURCE_REF = /^(photo|audio):local:[a-z0-9_-]{3,96}$/i;
+
+export function normalizeAvatarPersonalizationProvenance(
+  provenance?: AvatarPersonalizationProvenance,
+): NormalizedAvatarPersonalizationProvenance {
+  const safeRefs = Array.from(new Set(
+    (provenance?.sourceRefs ?? [])
+      .map((ref) => ref.trim())
+      .filter((ref) => SAFE_PERSONALIZATION_SOURCE_REF.test(ref)),
+  )).slice(0, 8);
+
+  return {
+    // A photo-assisted version without a valid opaque receipt is not allowed
+    // to claim photo provenance.
+    mode: provenance?.mode === 'photo_assisted' && safeRefs.length > 0 ? 'photo_assisted' : 'manual',
+    sourceRefs: safeRefs,
+  };
+}
+
 export interface AvatarPersonalizationDraft {
   faceWidth: number;
   faceHeight: number;
