@@ -281,6 +281,8 @@ test.describe('390x844 手机界面功能冒烟', () => {
       await expect(page.getByText(/已映射并渲染 ≠ 身份匹配、人体测量精度或本人相似度已验证/)).toBeVisible();
       await page.getByRole('button', { name: '展开照片拟合来源与隐私详情' }).click();
       await expect(page.getByText(/正式版本只会保存确认后的参数与该不透明来源凭据/)).toBeVisible();
+      await page.getByRole('button', { name: '收起照片拟合来源与隐私详情' }).click();
+      await expect(page.getByText(/正式版本只会保存确认后的参数与该不透明来源凭据/)).toHaveCount(0);
 
       const draftLabel = await draftCard.getAttribute('aria-label');
       const receipt = draftLabel?.match(/(photo:local:[a-z0-9_-]+)/i)?.[1];
