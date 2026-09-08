@@ -2,10 +2,11 @@
  * 照片捏脸 + 体格拟合：从用户照片提取归一化特征，映射到 AvatarIdentity。
  *
  * ─── 隐私承诺（SubTask 16.5）─────────────────────────────────────────
- * 照片只在本设备处理，绝不上传服务器。
- *   - Web：图片在浏览器内通过 canvas 解码后送入 MediaPipe
- *         FaceLandmarker / PoseLandmarker（WASM 也仅从公共 CDN 拉取，
- *         不发送图片像素）。
+ * 照片像素只在本设备/浏览器会话中处理，不作为 MediaPipe 输入数据上传。
+ *   - Web：图片在浏览器内解码后送入随应用 bundle 发布的 MediaPipe
+ *         FaceLandmarker / PoseLandmarker；WASM 与模型按固定版本从外部源下载。
+ *         MediaPipe 官方说明不发送输入图像数据，但 Tasks API 可能发送
+ *         性能/使用指标。
  *   - Android：通过本项目的本地 Expo Module 调用随 APK 打包的 ML Kit
  *              Face Detection 与 Pose Detection；首次使用无需下载模型，
  *              照片像素不离开设备。
@@ -15,6 +16,7 @@
  */
 
 import { Platform } from 'react-native';
+import { FaceLandmarker, FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 import {
   detectNativeFaceLandmarks,
   detectNativePoseLandmarks,
@@ -45,7 +47,7 @@ export {
   type ViewKind,
 } from './fittingMath';
 
-// ─── Web 端：MediaPipe 动态加载（CDN，不打包进 bundle）─────────────
+// ─── Web 端：MediaPipe JS 随应用 bundle；WASM/模型固定版本外部加载 ───
 
 const MEDIAPIPE_VERSION = '0.10.35';
 const MEDIAPIPE_CDN = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}`;
@@ -94,21 +96,17 @@ interface TasksVisionExports {
   };
 }
 
-let visionModulePromise: Promise<TasksVisionExports> | null = null;
+const BUNDLED_TASKS_VISION = {
+  FaceLandmarker,
+  PoseLandmarker,
+  FilesetResolver,
+} as unknown as TasksVisionExports;
 
-async function loadTasksVisionFromCDN(): Promise<TasksVisionExports> {
-  if (!visionModulePromise) {
-    visionModulePromise = (async () => {
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        const moduleUrl = `${MEDIAPIPE_CDN}/vision_bundle.mjs`;
-        const dynamicImport = new Function('url', `return import(url)`);
-        const module = await dynamicImport(moduleUrl);
-        return module as TasksVisionExports;
-      }
-      throw new Error('MediaPipe is only supported on web');
-    })();
+function loadBundledTasksVision(): TasksVisionExports {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return BUNDLED_TASKS_VISION;
   }
-  return visionModulePromise;
+  throw new Error('MediaPipe is only supported on web');
 }
 
 /**
@@ -132,7 +130,7 @@ let poseLandmarkerPromise: Promise<PoseLandmarkerLike> | null = null;
 async function getFaceLandmarker(): Promise<FaceLandmarkerLike> {
   if (!faceLandmarkerPromise) {
     faceLandmarkerPromise = (async () => {
-      const vision = await loadTasksVisionFromCDN();
+      const vision = loadBundledTasksVision();
       const fileset = await vision.FilesetResolver.forVisionTasks(`${MEDIAPIPE_CDN}/wasm`);
       return createWithDelegateFallback((delegate) =>
         vision.FaceLandmarker.createFromOptions(fileset, {
@@ -149,7 +147,7 @@ async function getFaceLandmarker(): Promise<FaceLandmarkerLike> {
 async function getPoseLandmarker(): Promise<PoseLandmarkerLike> {
   if (!poseLandmarkerPromise) {
     poseLandmarkerPromise = (async () => {
-      const vision = await loadTasksVisionFromCDN();
+      const vision = loadBundledTasksVision();
       const fileset = await vision.FilesetResolver.forVisionTasks(`${MEDIAPIPE_CDN}/wasm`);
       return createWithDelegateFallback((delegate) =>
         vision.PoseLandmarker.createFromOptions(fileset, {
