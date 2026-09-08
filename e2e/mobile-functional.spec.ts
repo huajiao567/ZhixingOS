@@ -137,13 +137,9 @@ test.describe('390x844 手机界面功能冒烟', () => {
     await page.getByRole('button', { name: '调整形象与状态，打开三维镜像编辑器' }).click();
     await expect(page.getByText('我的三维镜像', { exact: true })).toBeVisible({ timeout: 30_000 });
     await page.getByRole('tab', { name: /切换到捏脸标签/ }).click();
-    await expect(page.getByText(/当前页面直接预览正式 V2 VRM/)).toBeVisible();
-    await expect(page.getByText('预览生效', { exact: true }).first()).toBeVisible();
-    await expect(page.getByText('当前仅保存', { exact: true }).first()).toBeVisible();
-    await expect(page.getByText(/肩宽走肩骨\/上臂根节点/)).toBeVisible();
 
-    // 生产 VRM runtime proof：不是只验证 store/UI 值，而是读取 renderer
-    // 已经应用后的 Three.js 世界变换和材质结果。
+    // 先证明编辑器自己的正式 VRM renderer 已经进入稳定帧，再截首屏；
+    // 这张图用于审计 390×844 下 3D 是否仍然是编辑器的视觉核心。
     await page.waitForFunction(() => {
       const root = window as typeof window & {
         __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
@@ -153,6 +149,13 @@ test.describe('390x844 手机界面功能冒烟', () => {
       return Boolean(probe?.geometry.headWorldScale && probe?.geometry.shoulderWorldDistance);
     }, undefined, { timeout: 120_000 });
     await expect(page.getByRole('progressbar')).toHaveCount(0, { timeout: 5_000 });
+    await screenshot(page, '02a-editor-top');
+
+    await expect(page.getByText(/当前页面直接预览正式 V2 VRM/)).toBeVisible();
+    await expect(page.getByText('预览生效', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(/更多精细参数 · 当前仅保存/)).toBeVisible();
+    await expect(page.getByText(/肩宽走肩骨\/上臂根节点/)).toBeVisible();
+
     const baselineProbe = await readEditorAvatarRuntimeProbe(page);
 
     await setIdentitySliderToEnd(page, '脸宽');
@@ -211,8 +214,10 @@ test.describe('390x844 手机界面功能冒烟', () => {
     }, bodyProbe.geometry.shoulderWorldDistance!, { timeout: 15_000 });
     const shoulderProbe = await readEditorAvatarRuntimeProbe(page);
 
-    // 当前模型的 eyeSize 是 stored-only：值可以进入预览 profile，但不能偷偷改变
-    // 已验证的头部/身体/肩部几何通道。
+    // 当前模型的 eyeSize 是 stored-only：默认折叠以降低界面噪声，
+    // 用户显式展开后仍可保存，但不能偷偷改变已验证的结构几何通道。
+    await page.getByRole('button', { name: '展开当前仅保存参数' }).click();
+    await expect(page.getByRole('button', { name: '收起当前仅保存参数' })).toBeVisible();
     await setIdentitySliderToEnd(page, '眼睛大小');
     await page.waitForFunction(() => {
       const root = window as typeof window & {
