@@ -195,10 +195,23 @@ test.describe('390x844 手机界面功能冒烟', () => {
     test.setTimeout(240_000);
     let fixturePath: string | null = null;
     const backendRequestBodies: string[] = [];
+    const mediaPipeExternalRequests: { url: string; forwardedFor?: string }[] = [];
     page.on('request', (request) => {
-      if (!request.url().startsWith('http://127.0.0.1:3001/')) return;
-      const body = request.postData();
-      if (body) backendRequestBodies.push(body);
+      const url = request.url();
+      if (url.startsWith('http://127.0.0.1:3001/')) {
+        const body = request.postData();
+        if (body) backendRequestBodies.push(body);
+        return;
+      }
+      if (
+        url.includes('cdn.jsdelivr.net/npm/@mediapipe/tasks-vision')
+        || url.includes('storage.googleapis.com/mediapipe-models/')
+      ) {
+        mediaPipeExternalRequests.push({
+          url,
+          forwardedFor: request.headers()['x-forwarded-for'],
+        });
+      }
     });
 
     try {
@@ -315,6 +328,18 @@ test.describe('390x844 手机界面功能冒烟', () => {
         ),
         'MediaPipe metrics consent should be registered before fitting',
       ).toBeTruthy();
+
+      expect(
+        mediaPipeExternalRequests.some((request) => /\/wasm\//.test(request.url)),
+        'real MediaPipe Web fitting should request its pinned WASM runtime',
+      ).toBeTruthy();
+      expect(
+        mediaPipeExternalRequests.some((request) => request.url.includes('/face_landmarker/')),
+        'real MediaPipe Web fitting should request the face-landmarker model',
+      ).toBeTruthy();
+      for (const request of mediaPipeExternalRequests) {
+        expect(request.forwardedFor, `synthetic backend IP leaked to external request: ${request.url}`).toBeUndefined();
+      }
 
       console.log('[photo-file-runtime-proof]', JSON.stringify({
         fixtureSha256: MEDIAPIPE_PORTRAIT_FIXTURE.sha256,
