@@ -45,6 +45,7 @@ interface VRMAvatarViewProps {
   triggerAcknowledge?: number;
   /** 触发触摸反应动画（外部点击舞台时）- 值变化时触发 */
   triggerTouchReaction?: number;
+  onLoadStateChange?: (state: AvatarLoadState) => void;
   onError?: (error: Error) => void;
 }
 
@@ -110,6 +111,7 @@ interface GLBModelProps {
   tapTriggerRef?: React.MutableRefObject<number>;
   /** 点击时的屏幕归一化坐标 [-1,1]，由OrbitControls设置 */
   tapScreenPosRef?: React.MutableRefObject<{ x: number; y: number }>;
+  onLoadStateChange?: (state: AvatarLoadState) => void;
 }
 
 /* ───────────── Error Boundary ───────────── */
@@ -580,27 +582,15 @@ function removeAvatarRuntimeProbe(instanceId: string) {
 async function loadModelSourceCached(url: string): Promise<ArrayBuffer> {
   let cached = modelSourceCache.get(url);
   if (!cached) {
-    reportAvatarLoad('requesting', { url, loaded: 0, total: 0 });
     cached = fetch(url)
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(`Avatar model request failed: HTTP ${response.status}`);
         }
-        const buffer = await response.arrayBuffer();
-        const headerTotal = Number(response.headers.get('content-length') ?? 0);
-        reportAvatarLoad('requesting', {
-          url,
-          loaded: buffer.byteLength,
-          total: headerTotal > 0 ? headerTotal : buffer.byteLength,
-        });
-        return buffer;
+        return response.arrayBuffer();
       })
       .catch((error) => {
         modelSourceCache.delete(url);
-        reportAvatarLoad('error', {
-          url,
-          message: error instanceof Error ? error.message : String(error),
-        });
         throw error;
       });
     modelSourceCache.set(url, cached);
@@ -608,8 +598,13 @@ async function loadModelSourceCached(url: string): Promise<ArrayBuffer> {
   return cached;
 }
 
-async function loadGLTFInstance(url: string): Promise<GLTF> {
+async function loadGLTFInstance(
+  url: string,
+  report: (phase: AvatarLoadPhase, details?: Omit<AvatarLoadState, 'phase'>) => void,
+): Promise<GLTF> {
+  report('requesting', { url, loaded: 0, total: 0 });
   const source = await loadModelSourceCached(url);
+  report('requesting', { url, loaded: source.byteLength, total: source.byteLength });
 
   return new Promise<GLTF>((resolve, reject) => {
     const loader = new GLTFLoader();
@@ -618,18 +613,18 @@ async function loadGLTFInstance(url: string): Promise<GLTF> {
       source,
       '',
       (gltf) => {
-        reportAvatarLoad('parsed', { url });
+        report('parsed', { url });
         const vrm: VRM | undefined = (gltf as any).userData?.vrm;
         if (vrm) {
-          reportAvatarLoad('optimizing', { url });
+          report('optimizing', { url });
           VRMUtils.removeUnnecessaryVertices(vrm.scene);
           VRMUtils.combineSkeletons(vrm.scene);
         }
-        reportAvatarLoad('loaded', { url });
+        report('loaded', { url });
         resolve(gltf);
       },
       (error) => {
-        reportAvatarLoad('error', {
+        report('error', {
           url,
           message: error instanceof Error ? error.message : String(error),
         });
@@ -640,13 +635,25 @@ async function loadGLTFInstance(url: string): Promise<GLTF> {
 }
 
 /* ───────────── GLB Model ───────────── */
-function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge, triggerTouchReaction, tapTriggerRef, tapScreenPosRef }: GLBModelProps) {
+function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge, triggerTouchReaction, tapTriggerRef, tapScreenPosRef, onLoadStateChange }: GLBModelProps) {
   const groupRef = useRef<THREE.Group>(null);
   const [model, setModel] = useState<THREE.Group | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [runtimeProbeInstanceId] = useState(
     () => `avatar-runtime-${++avatarRuntimeProbeInstanceSequence}`,
   );
+  const reportInstanceLoad = useCallback((
+    phase: AvatarLoadPhase,
+    details: Omit<AvatarLoadState, 'phase'> = {},
+  ) => {
+    const state: AvatarLoadState = {
+      ...details,
+      phase,
+      updatedAt: Date.now(),
+    };
+    onLoadStateChange?.(state);
+    reportAvatarLoad(phase, details);
+  }, [onLoadStateChange]);
 
   const bonesRef = useRef<FoundBones>(
     { leftUpperArm: null, rightUpperArm: null, leftLowerArm: null, rightLowerArm: null, leftShoulder: null, rightShoulder: null, spine: null, chest: null, head: null, neck: null, leftEye: null, rightEye: null }
@@ -688,13 +695,13 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
 
     (async () => {
       try {
-        reportAvatarLoad('effect-start', { url });
-        const gltf = await loadGLTFInstance(url);
+        reportInstanceLoad('effect-start', { url });
+        const gltf = await loadGLTFInstance(url, reportInstanceLoad);
         if (disposed) {
-          reportAvatarLoad('discarded', { url });
+          reportInstanceLoad('discarded', { url });
           return;
         }
-        reportAvatarLoad('preparing', { url });
+        reportInstanceLoad('preparing', { url });
 
         const scene = gltf.scene;
 
@@ -941,7 +948,7 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
         motionRef.current.growthWeights = growthTraitsToBlendShapes(profile.growthTraits);
 
         setModel(scene);
-        reportAvatarLoad('model-mounted', { url });
+        reportInstanceLoad('model-mounted', { url });
         // 眼睛高度：优先使用眼球骨骼位置，fallback到估算
         let estimatedEyeY: number;
         const skullToTop = finalBox.max.y - finalHeadBoneY;
@@ -959,14 +966,14 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
         lookAtSmoothRef.current.set(0, estimatedEyeY, 0.8);
 
         onLoaded?.(finalSize, finalCenter, estimatedEyeY, finalHeadCenterX, finalHeadBoneY, finalShoulderY, finalChestY, actualShoulderWidth);
-        reportAvatarLoad('ready', {
+        reportInstanceLoad('ready', {
           url,
           size: { x: finalSize.x, y: finalSize.y, z: finalSize.z },
           center: { x: finalCenter.x, y: finalCenter.y, z: finalCenter.z },
         });
       } catch (error: unknown) {
         console.error('[VRM] Failed to load model:', url, error);
-        reportAvatarLoad('error', {
+        reportInstanceLoad('error', {
           url,
           message: error instanceof Error ? error.message : String(error),
         });
@@ -993,7 +1000,7 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
       fatigueOverlayRef.current = null;
       fatigueMaterialsRef.current = [];
     };
-  }, [url, onLoaded, onError, runtimeProbeInstanceId]);
+  }, [url, onLoaded, onError, runtimeProbeInstanceId, reportInstanceLoad]);
 
   // 用户确认的肤色/发色/服装色只作用于明确识别出的材质。
   // 每次都从首次缓存的原始材质颜色重新混合，避免热更新或多次保存造成颜色累积漂移。
@@ -2377,6 +2384,7 @@ export function VRMAvatarView({
   onAvatarPress,
   triggerAcknowledge,
   triggerTouchReaction,
+  onLoadStateChange,
   onError,
 }: VRMAvatarViewProps) {
   const { gl } = useThree();
@@ -2458,6 +2466,7 @@ export function VRMAvatarView({
           profile={profile}
           triggerAcknowledge={triggerAcknowledge}
           triggerTouchReaction={triggerTouchReaction}
+          onLoadStateChange={onLoadStateChange}
           tapTriggerRef={tapTriggerRef}
           tapScreenPosRef={tapScreenPosRef}
         />
