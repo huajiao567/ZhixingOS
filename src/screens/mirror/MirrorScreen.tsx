@@ -258,6 +258,7 @@ export function MirrorScreen() {
         <Mirror3DPanel
           height={360}
           paused={!isFocused}
+          active={isFocused}
           onOpenEditor={() => navigation.navigate('Mirror3DEditor')}
         />
 
