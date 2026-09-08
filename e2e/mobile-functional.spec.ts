@@ -99,7 +99,7 @@ test.describe('390x844 手机界面功能冒烟', () => {
     page.setDefaultTimeout(20_000);
   });
 
-  test('登录、记录与五条主路径均可操作', async ({ page }) => {
+  test('登录、低摩擦记录与镜像解释均可操作', async ({ page }) => {
     test.setTimeout(240_000);
     await loginDemo(page);
     await page.waitForFunction(() => {
@@ -133,6 +133,46 @@ test.describe('390x844 手机界面功能冒烟', () => {
     await page.getByRole('button', { name: '关闭显示解释' }).click();
     await expect(page.getByRole('button', { name: '关闭显示解释' })).toHaveCount(0, { timeout: 5_000 });
     await screenshot(page, '02-mirror');
+    await page.getByRole('button', { name: '返回主页' }).click();
+    await expect(page.getByRole('button', { name: '现在的我' })).toBeVisible();
+  });
+
+  test('照片拟合隐私边界与技术说明在 390x844 下可访问', async ({ page }) => {
+    test.setTimeout(240_000);
+    await loginDemo(page);
+    await page.getByRole('button', { name: '现在的我' }).click();
+    await expect(page.getByText('镜像', { exact: true }).first()).toBeVisible();
+
+    await page.getByRole('button', { name: '调整形象与状态，打开三维镜像编辑器' }).click();
+    await expect(page.getByText('我的三维镜像', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await page.getByRole('tab', { name: /切换到捏脸标签/ }).click();
+
+    await page.waitForFunction(() => {
+      const root = window as typeof window & {
+        __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+      };
+      const probe = Object.values(root.__avatarRuntimeProbes ?? {})
+        .find((candidate) => candidate.evidenceTypes.includes('editor_preview'));
+      return Boolean(probe?.geometry.headWorldScale && probe?.geometry.shoulderWorldDistance);
+    }, undefined, { timeout: 120_000 });
+
+    const photoFitButton = page.getByRole('button', { name: '从照片生成脸与体格参数' });
+    await photoFitButton.scrollIntoViewIfNeeded();
+    await expect(page.getByText(/不自动上传服务器/)).toBeVisible();
+    await expect(page.getByText(/不保存图片路径或原始像素/)).toBeVisible();
+    const privacyDetails = page.getByRole('button', { name: '展开照片拟合技术与缓存说明' });
+    await expect(privacyDetails).toBeVisible();
+    await privacyDetails.click();
+    await expect(page.getByText(/Android APK 使用随包内置的 ML Kit/)).toBeVisible();
+    await page.getByRole('button', { name: '收起照片拟合技术与缓存说明' }).click();
+    await screenshot(page, '02a-photo-fit-privacy');
+  });
+
+  test('正式 VRM 个性化参数真实改变渲染并经确认进入 Timeline', async ({ page }) => {
+    test.setTimeout(240_000);
+    await loginDemo(page);
+    await page.getByRole('button', { name: '现在的我' }).click();
+    await expect(page.getByText('镜像', { exact: true }).first()).toBeVisible();
 
     await page.getByRole('button', { name: '调整形象与状态，打开三维镜像编辑器' }).click();
     await expect(page.getByText('我的三维镜像', { exact: true })).toBeVisible({ timeout: 30_000 });
@@ -273,6 +313,11 @@ test.describe('390x844 手机界面功能冒烟', () => {
 
     await page.getByRole('button', { name: '返回主页' }).click();
     await expect(page.getByRole('button', { name: '现在的我' })).toBeVisible();
+  });
+
+  test('进程、秘书、数据主权与连接数据主路径均可操作', async ({ page }) => {
+    test.setTimeout(240_000);
+    await loginDemo(page);
 
     await page.getByRole('button', { name: /规划：/ }).click();
     await expect(page.getByText('进程', { exact: true }).first()).toBeVisible();

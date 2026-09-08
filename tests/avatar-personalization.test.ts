@@ -6,6 +6,7 @@ import {
   deriveAvatarIdentityGeometry,
   deriveCompensatedHeadLocalScale,
   nextIdentityVersion,
+  normalizeAvatarPersonalizationProvenance,
   personalizationDraftToProfile,
   safeAppearanceColor,
 } from '../src/mirror3d/avatar/v2/avatarPersonalization';
@@ -99,4 +100,43 @@ test('identity version increments only the patch component', () => {
 test('appearance color accepts only six-digit hex', () => {
   assert.equal(safeAppearanceColor('#aabbcc', '#000000'), '#AABBCC');
   assert.equal(safeAppearanceColor('red', '#123456'), '#123456');
+});
+
+
+test('avatar personalization provenance persists only opaque local receipts', () => {
+  assert.deepEqual(
+    normalizeAvatarPersonalizationProvenance({
+      mode: 'photo_assisted',
+      sourceRefs: [
+        'photo:local:abc123',
+        ' photo:local:abc123 ',
+        'file:///private/var/mobile/photo.jpg',
+        'content://media/external/images/42',
+        'blob:https://example.test/123',
+        'data:image/jpeg;base64,AAAA',
+        'https://example.test/photo.jpg',
+      ],
+    }),
+    {
+      mode: 'photo_assisted',
+      sourceRefs: ['photo:local:abc123'],
+    },
+  );
+});
+
+test('photo-assisted provenance fails closed to manual without a valid opaque receipt', () => {
+  assert.deepEqual(
+    normalizeAvatarPersonalizationProvenance({
+      mode: 'photo_assisted',
+      sourceRefs: ['file:///tmp/raw.jpg'],
+    }),
+    {
+      mode: 'manual',
+      sourceRefs: [],
+    },
+  );
+  assert.deepEqual(normalizeAvatarPersonalizationProvenance(), {
+    mode: 'manual',
+    sourceRefs: [],
+  });
 });

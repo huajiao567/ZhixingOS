@@ -27,8 +27,10 @@ import type { PersonalModelVersion } from '../../types/models';
 import { syncModelVersionsToAvatarTimeline } from '../avatar/avatarTimeline';
 import {
   nextIdentityVersion,
+  normalizeAvatarPersonalizationProvenance,
   personalizationDraftToProfile,
   type AvatarPersonalizationDraft,
+  type AvatarPersonalizationProvenance,
 } from '../avatar/v2/avatarPersonalization';
 
 const LEGACY_STORAGE_KEY = 'satori_avatar_v2_profile';
@@ -57,7 +59,12 @@ interface AvatarV2State {
   /** 用户确认的外观修改（先预览后确认；递增外观版本并写时间线） */
   confirmAppearance: (next: Partial<AvatarAppearance>, label: string, note?: string) => void;
   /** 将编辑器中的脸型/体格/肤色/发色/服装色作为一个明确确认的数字孪生版本保存。 */
-  confirmPersonalization: (draft: AvatarPersonalizationDraft, label: string, note?: string) => void;
+  confirmPersonalization: (
+    draft: AvatarPersonalizationDraft,
+    label: string,
+    note?: string,
+    provenance?: AvatarPersonalizationProvenance,
+  ) => void;
   /** 保存「此时的我」到时间线 */
   saveTimelineSnapshot: (label: string, note?: string) => void;
   /** 将个人模型版本幂等同步为阶段快照，不读取原始弱证据。 */
@@ -204,10 +211,11 @@ export const useAvatarV2Store = create<AvatarV2State>((set, get) => ({
     persist(next);
   },
 
-  confirmPersonalization: (draft, label, note) => {
+  confirmPersonalization: (draft, label, note, provenance) => {
     const { profile } = get();
     const now = new Date().toISOString();
     const personalized = personalizationDraftToProfile(profile, draft);
+    const normalizedProvenance = normalizeAvatarPersonalizationProvenance(provenance);
     const identityVersion = nextIdentityVersion(profile.identity.identityVersion);
     const appearanceVersion = profile.appearance.appearanceVersion + 1;
     const entry: AvatarTimelineEntry = {
@@ -222,6 +230,10 @@ export const useAvatarV2Store = create<AvatarV2State>((set, get) => ({
         behavior: { ...profile.behaviorStyle },
       },
       createdAt: now,
+      personalizationSource: normalizedProvenance.mode,
+      ...(normalizedProvenance.sourceRefs.length > 0
+        ? { sourceRefs: normalizedProvenance.sourceRefs }
+        : {}),
       note,
     };
     const next: AvatarProfileV2 = {

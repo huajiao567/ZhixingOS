@@ -15,6 +15,7 @@ test('journal source labels stay explicit', () => {
   assert.equal(journalSourceLabel('photo-note'), '照片');
   assert.equal(journalSourceLabel('voice-note'), '语音');
   assert.equal(journalSourceLabel('avatar-editor'), '孪生');
+  assert.equal(journalSourceLabel('avatar-editor:photo:local:abc123'), '孪生');
   assert.equal(journalSourceLabel('external'), '记录');
 });
 

@@ -103,6 +103,14 @@ type IdentityLike = {
   browAngle: number; noseSize: number; mouthWidth: number; bodyScale: number; shoulderWidth: number;
 };
 
+type PhotoDraftProvenance = {
+  sourceRef: string;
+  width: number;
+  height: number;
+  fittedAt: string;
+  fittedParts: string[];
+};
+
 export function Mirror3DEditor() {
   const theme = useAppTheme();
   const D = theme.colors;
@@ -131,6 +139,8 @@ export function Mirror3DEditor() {
   const [diary, setDiary] = useState(signals.diary);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoHint, setPhotoHint] = useState<string | null>(null);
+  const [photoDraftProvenance, setPhotoDraftProvenance] = useState<PhotoDraftProvenance | null>(null);
+  const [photoPrivacyDetailsExpanded, setPhotoPrivacyDetailsExpanded] = useState(false);
   const [storedOnlyExpanded, setStoredOnlyExpanded] = useState(false);
 
   useEffect(() => {
@@ -224,19 +234,41 @@ export function Mirror3DEditor() {
   };
 
   const savePersonalization = async () => {
+    const photoSourceRef = photoDraftProvenance?.sourceRef;
+    const sourceMode = photoSourceRef ? 'photo_assisted' : 'manual';
+    const versionNote = photoSourceRef
+      ? `来自三维镜像编辑器；照片只在本地生成预览草稿。正式版本仅保留不含原始路径的不透明来源凭据 ${photoSourceRef} 与用户确认后的参数，不保存图片路径或原始像素。`
+      : '来自三维镜像编辑器的手动调整；保存动作由用户明确触发，未关联照片来源。';
+
     confirmPersonalization(
       personalizationDraft,
       '确认我的三维形象',
-      '来自三维镜像编辑器；照片拟合仅在本地生成草稿，保存动作由用户明确触发。',
+      versionNote,
+      {
+        mode: sourceMode,
+        sourceRefs: photoSourceRef ? [photoSourceRef] : [],
+      },
     );
     await useStore.getState().addJournal([
       '[孪生] 用户确认更新三维形象',
       '已应用：脸宽/脸长、身体框架、肩骨宽度、肤色、发色与服装色。',
       '已保存待后续模型支持：下颌、眼睛、眼距、眉形、鼻子、嘴部等精细参数。',
-      '来源：用户在三维镜像编辑器中明确确认。',
-    ].join('\n'), { sourceRef: 'avatar-editor', titlePrefix: '孪生记录' });
-    useStore.getState().pushAudit('用户', '确认三维数字孪生身份与外观版本');
-    setPhotoHint('已保存到正式数字孪生，并写入新的身份版本。');
+      photoSourceRef
+        ? `来源：照片辅助草稿 + 用户明确确认；只保留不透明来源凭据 ${photoSourceRef}，不保存原始路径或像素。`
+        : '来源：用户在三维镜像编辑器中手动调整并明确确认。',
+    ].join('\n'), {
+      sourceRef: photoSourceRef ? `avatar-editor:${photoSourceRef}` : 'avatar-editor',
+      titlePrefix: '孪生记录',
+    });
+    useStore.getState().pushAudit(
+      '用户',
+      `确认三维数字孪生身份与外观版本（${photoSourceRef ? '照片辅助' : '手动'}）`,
+      photoSourceRef,
+    );
+    setPhotoDraftProvenance(null);
+    setPhotoHint(photoSourceRef
+      ? '已确认并保存。正式版本只保留不透明照片来源凭据，不保存原始路径或像素。'
+      : '已保存到正式数字孪生，并写入新的身份版本。');
   };
 
   const reset = () => {
@@ -244,6 +276,7 @@ export function Mirror3DEditor() {
     setFbActive(null);
     setScActive(null);
     setDiary('');
+    setPhotoDraftProvenance(null);
   };
 
   const handlePhotoFitting = async () => {
@@ -277,10 +310,22 @@ export function Mirror3DEditor() {
           ? '身体框架与肩宽'
           : '肩宽（半身照，身体框架保持中性）');
       }
+      setPhotoDraftProvenance({
+        sourceRef: photo.sourceRef,
+        width: photo.width,
+        height: photo.height,
+        fittedAt: new Date().toISOString(),
+        fittedParts: parts,
+      });
       setPhotoHint(`已根据照片调整${parts.join('与')}，你可以继续微调；只有标记为“预览生效”的参数会改变当前生产数字人。`);
 
       // 照片结果先只形成本地草稿；只有用户点击“保存到我的数字孪生”才进入正式身份版本。
-      useStore.getState().pushAudit('用户', `本地照片生成三维形象草稿：${parts.join('、') || '无'}`);
+      // 审计只持有不透明 sourceRef，不保存 file/content/blob URI。
+      useStore.getState().pushAudit(
+        '用户',
+        `本地照片生成三维形象草稿：${parts.join('、') || '无'}`,
+        photo.sourceRef,
+      );
     } catch (err) {
       console.warn('[Mirror3DEditor] 从照片拟合失败:', err);
       setPhotoHint(err instanceof Error ? err.message : '处理照片时出错，请稍后再试。');
@@ -600,14 +645,63 @@ export function Mirror3DEditor() {
                     </Text>
                   )}
                 </Pressable>
-                <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, lineHeight: 18, marginTop: theme.spacing.sm }}>
-                  照片只在本设备处理，不会上传服务器。Android APK 使用随包内置的 ML Kit 人脸与 33 点姿态模型，
-                  Web 使用 MediaPipe；全身照拟合体格，半身照只更新肩宽。分析结束即清除应用缓存中的照片副本。
-                </Text>
+                <View style={{ marginTop: theme.spacing.sm }}>
+                  <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, lineHeight: 18 }}>
+                    仅在本机/浏览器会话中分析，不自动上传服务器。
+                  </Text>
+                  <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, lineHeight: 18, marginTop: 2 }}>
+                    正式 Avatar 版本只保存确认后的参数与不透明来源凭据，不保存图片路径或原始像素。
+                  </Text>
+                  <Pressable
+                    onPress={() => setPhotoPrivacyDetailsExpanded((value) => !value)}
+                    accessibilityRole="button"
+                    accessibilityLabel={photoPrivacyDetailsExpanded ? '收起照片拟合技术与缓存说明' : '展开照片拟合技术与缓存说明'}
+                    accessibilityState={{ expanded: photoPrivacyDetailsExpanded }}
+                    style={({ pressed }) => ({
+                      minHeight: theme.touch.minTarget,
+                      alignSelf: 'flex-start',
+                      justifyContent: 'center',
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <Text style={{ color: D.teal, fontSize: theme.font.tiny, fontWeight: '700' }}>
+                      技术与缓存说明 {photoPrivacyDetailsExpanded ? '⌃' : '⌄'}
+                    </Text>
+                  </Pressable>
+                  {photoPrivacyDetailsExpanded && (
+                    <Text style={{ color: D.textTertiary, fontSize: theme.font.tiny, lineHeight: 18 }}>
+                      Android APK 使用随包内置的 ML Kit 人脸与 33 点姿态模型，Web 使用 MediaPipe；全身照拟合体格，半身照只更新肩宽。
+                      原生端若图片选择器生成应用缓存工作副本，分析结束后会尝试删除该副本。
+                    </Text>
+                  )}
+                </View>
                 {photoHint && (
                   <Text style={{ color: D.accent, fontSize: theme.font.tiny, lineHeight: 18, marginTop: theme.spacing.xs }}>
                     {photoHint}
                   </Text>
+                )}
+                {photoDraftProvenance && (
+                  <View
+                    accessible
+                    accessibilityLabel={`照片拟合草稿，仅本地分析，待确认，来源凭据 ${photoDraftProvenance.sourceRef}`}
+                    style={{
+                      marginTop: theme.spacing.sm,
+                      paddingVertical: theme.spacing.sm,
+                      paddingHorizontal: theme.spacing.md,
+                      borderRadius: theme.radius.md,
+                      backgroundColor: D.surfaceAlt,
+                    }}
+                  >
+                    <Text style={{ color: D.textPrimary, fontSize: theme.font.tiny, fontWeight: '700' }}>
+                      照片拟合草稿 · 仅本地分析 · 待确认
+                    </Text>
+                    <Text style={{ color: D.textTertiary, fontSize: theme.font.tiny, lineHeight: 16, marginTop: 2 }}>
+                      {photoDraftProvenance.width}×{photoDraftProvenance.height} · 来源凭据 {photoDraftProvenance.sourceRef}
+                    </Text>
+                    <Text style={{ color: D.textTertiary, fontSize: theme.font.tiny, lineHeight: 16, marginTop: 2 }}>
+                      正式版本只会保存确认后的参数与该不透明来源凭据；不会保存原始照片路径或像素。
+                    </Text>
+                  </View>
                 )}
               </Section>
 

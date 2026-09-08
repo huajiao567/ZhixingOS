@@ -11,7 +11,7 @@ import { seedPermissions } from '../data/seed';
 import { toStateSnapshot } from '../engine/stateAdapter';
 import { enqueue, flush, currentStatus, clearConflicts, clearQueue, type SyncConflict } from '../services/sync';
 import { useServiceContractStore } from './useServiceContractStore';
-import { inferJournalDomain, journalTitle, type JournalInputOptions } from '../ai-native/intake/journalRecord';
+import { inferJournalDomain, journalSourceLabel, journalTitle, type JournalInputOptions } from '../ai-native/intake/journalRecord';
 
 const PROFILE_KEY = 'zx_profile';
 
@@ -358,7 +358,7 @@ export const useStore = create<AppState>((set, get) => {
         userInterpretation: clean,
       };
       set((s) => ({ events: [ev, ...s.events] }));
-      get().pushAudit('用户', `记录一条${sourceRef === 'photo-note' ? '照片' : sourceRef === 'voice-note' ? '语音' : sourceRef === 'avatar-editor' ? '孪生' : '文字'}记录`);
+      get().pushAudit('用户', `记录一条${journalSourceLabel(sourceRef)}记录`);
       pushMutation('POST', '/api/data/events', ev, `ev:${ev.id}`);
       try { await get().refreshState(); } catch { /* 网络重试由同步层负责 */ }
     },
