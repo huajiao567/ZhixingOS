@@ -18,7 +18,7 @@
  * 模型来源与许可证：见 THIRD_PARTY_ASSETS.md；该文件的嵌入 VRM 元数据允许
  * 商业使用、修改和再分发，但并非以 CC0 为依据。
  */
-import React, { Component, useEffect, useState, Suspense, type ErrorInfo, type ReactNode } from 'react';
+import React, { Component, useCallback, useEffect, useState, Suspense, type ErrorInfo, type ReactNode } from 'react';
 import { Platform, Text, View, Pressable, useWindowDimensions } from 'react-native';
 import { Canvas, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -380,6 +380,7 @@ export function AvatarModelView({
   const [hintVisible, setHintVisible] = useState(true);
   const [renderFailed, setRenderFailed] = useState(false);
   const [loadState, setLoadState] = useState<AvatarLoadState>({ phase: 'idle' });
+  const handleRenderError = useCallback(() => setRenderFailed(true), []);
 
   // 手机端（宽度<600）适配参数
   const isNarrow = screenWidth < 600;
@@ -467,7 +468,7 @@ export function AvatarModelView({
   const failureFallback = <ThreeStatus reason={webgl ? 'error' : 'webgl'} />;
   if (!webgl || renderFailed) return <>{failureFallback}</>;
   return (
-    <AvatarCanvasErrorBoundary fallback={failureFallback} onError={() => setRenderFailed(true)}>
+    <AvatarCanvasErrorBoundary fallback={failureFallback} onError={handleRenderError}>
       <View style={{ flex: 1, width: '100%', height: '100%', position: 'relative', pointerEvents: 'box-none' }}>
         <Suspense fallback={<ThreeStatus reason="loading" />}>
           <Stage
@@ -478,7 +479,7 @@ export function AvatarModelView({
             triggerAcknowledge={triggerAcknowledge}
             triggerTouchReaction={triggerTouchReaction}
             onLoadStateChange={setLoadState}
-            onRenderError={() => setRenderFailed(true)}
+            onRenderError={handleRenderError}
           />
         </Suspense>
 
