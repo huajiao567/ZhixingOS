@@ -352,7 +352,7 @@ export const useStore = create<AppState>((set, get) => {
         domain: options.domain ?? inferJournalDomain(clean),
         sensitivity: options.sensitivity ?? 'sensitive',
         confidence: 1,
-        consentId: 'perm-journal',
+        consentId: options.consentId ?? 'perm-journal',
         layer: 'fact',
         axis: 'inner',
         userInterpretation: clean,
