@@ -102,7 +102,14 @@ test.describe('390x844 手机界面功能冒烟', () => {
   test('登录、记录与五条主路径均可操作', async ({ page }) => {
     test.setTimeout(240_000);
     await loginDemo(page);
-    await expect(page.getByRole('progressbar')).toHaveCount(0, { timeout: 120_000 });
+    await page.waitForFunction(() => {
+      const root = window as typeof window & {
+        __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+      };
+      return Object.values(root.__avatarRuntimeProbes ?? {})
+        .some((probe) => Boolean(probe.geometry.headWorldScale));
+    }, undefined, { timeout: 120_000 });
+    await expect(page.getByRole('progressbar')).toHaveCount(0, { timeout: 5_000 });
     await screenshot(page, '01-mirror-home');
 
     const recordInput = page.getByPlaceholder('说点什么…');
@@ -124,6 +131,7 @@ test.describe('390x844 手机界面功能冒烟', () => {
     await expect(page.getByText(/眼下疲劳会在数据变旧后衰减/)).toBeVisible();
     await expect(page.getByText(/不作心理诊断/)).toBeVisible();
     await page.getByRole('button', { name: '关闭显示解释' }).click();
+    await expect(page.getByRole('button', { name: '关闭显示解释' })).toHaveCount(0, { timeout: 5_000 });
     await screenshot(page, '02-mirror');
 
     await page.getByRole('button', { name: '调整形象与状态，打开三维镜像编辑器' }).click();
@@ -162,6 +170,9 @@ test.describe('390x844 手机界面功能冒烟', () => {
       );
     }, baselineProbe.geometry.headWorldScale!.x, { timeout: 15_000 });
     const faceProbe = await readEditorAvatarRuntimeProbe(page);
+    const faceWidthRatio = faceProbe.geometry.headWorldScale!.x / baselineProbe.geometry.headWorldScale!.x;
+    expect(faceWidthRatio).toBeGreaterThan(1.045);
+    expect(faceWidthRatio).toBeLessThan(1.075);
     await screenshot(page, '02a-avatar-face-width-runtime');
 
     await setIdentitySliderToEnd(page, '身体比例');
@@ -226,6 +237,22 @@ test.describe('390x844 手机界面功能冒烟', () => {
         .find((candidate) => candidate.evidenceTypes.includes('editor_preview'));
       return Boolean(probe?.appearance.outfit && probe.appearance.outfit !== previousOutfit);
     }, outfitBefore, { timeout: 10_000 });
+    const personalizedProbe = await readEditorAvatarRuntimeProbe(page);
+    console.log('[avatar-runtime-proof]', JSON.stringify({
+      baselineHeadX: baselineProbe.geometry.headWorldScale!.x,
+      faceHeadX: faceProbe.geometry.headWorldScale!.x,
+      faceWidthRatio,
+      bodyGroupX: bodyProbe.geometry.groupScale.x,
+      bodyHeadX: bodyProbe.geometry.headWorldScale!.x,
+      shoulderBefore: bodyProbe.geometry.shoulderWorldDistance,
+      shoulderAfter: shoulderProbe.geometry.shoulderWorldDistance,
+      storedOnlyHeadX: storedOnlyProbe.geometry.headWorldScale!.x,
+      storedOnlyGroupX: storedOnlyProbe.geometry.groupScale.x,
+      storedOnlyShoulderDistance: storedOnlyProbe.geometry.shoulderWorldDistance,
+      shoulderRootNames: personalizedProbe.geometry.shoulderRootNames,
+      outfitBefore,
+      outfitAfter: personalizedProbe.appearance.outfit,
+    }));
     await screenshot(page, '02b-avatar-runtime-personalized');
 
     await page.getByRole('button', { name: '保存到我的数字孪生' }).click();
