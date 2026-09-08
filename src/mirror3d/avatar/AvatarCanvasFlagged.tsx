@@ -26,6 +26,8 @@ interface AvatarCanvasFlaggedProps {
   size?: number;
   fill?: boolean;
   paused?: boolean;
+  /** 导航失焦时彻底停止挂载 3D runtime，避免隐藏页面继续解析/占用 WebGL。 */
+  active?: boolean;
   style?: StyleProp<ViewStyle>;
   onAvatarPress?: () => void;
   triggerAcknowledge?: number;
@@ -105,6 +107,7 @@ export function AvatarCanvasFlagged({
   size,
   fill = false,
   paused,
+  active = true,
   style,
   onAvatarPress,
   triggerAcknowledge,
@@ -142,6 +145,12 @@ export function AvatarCanvasFlagged({
   }
 
   const isStatic = mode === 'static3d';
+
+  // 失焦页面不保留隐藏的 Canvas/VRM runtime。它们不可见，却仍会解析 15MB+
+  // 模型并占用 WebGL/动画资源；重新获得焦点时再从共享 GLB bytes 建立独立实例。
+  if (!active) {
+    return <View style={containerStyle} />;
+  }
 
   return (
     <View style={containerStyle}>
