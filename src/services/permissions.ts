@@ -1,4 +1,5 @@
 import { api } from './api';
+import type { SourcePermission } from '../types/models';
 
 export type RuntimeDataType =
   | 'calendar' | 'task' | 'health' | 'device_usage' | 'desktop_usage' | 'nutrition'
@@ -36,8 +37,11 @@ export async function registerSourcePermission(
   dataType: RuntimeDataType,
   purpose: string,
   scope: Record<string, unknown>,
-): Promise<void> {
-  await api.post('/api/data/source-permissions', {
+): Promise<SourcePermission> {
+  // Return the persisted permission row so downstream records can retain the
+  // exact consent grant that authorized this capture. Do not replace it with a
+  // generic "journal" consent marker.
+  return api.sourcePermissions.grant({
     data_type: dataType,
     purpose,
     scope,
