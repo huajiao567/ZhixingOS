@@ -177,6 +177,16 @@ export interface AvatarTimelineEntry {
   /** 既有版本补录时如实标注首次同步捕获，避免伪造历史外观。 */
   snapshotProvenance?: 'captured_on_first_sync';
   capturedAt?: string;
+  /**
+   * How this confirmed identity/appearance version was authored. Historical
+   * entries may omit this field.
+   */
+  personalizationSource?: 'manual' | 'photo_assisted';
+  /**
+   * Opaque local evidence receipts only; never raw image/audio paths, URIs or
+   * pixel payloads.
+   */
+  sourceRefs?: string[];
   note?: string;
 }
 
