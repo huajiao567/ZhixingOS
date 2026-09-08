@@ -27,6 +27,7 @@ import { useAppTheme } from '../../theme/theme';
 import { ThemeSelector } from '../../components/ThemeSelector';
 import { StateExplainer } from '../avatar/StateExplainer';
 import { deleteTemporaryPhotoCopy, pickPhoto } from '../../services/mediaCapture';
+import { registerSourcePermission } from '../../services/permissions';
 import { useAvatarV2Store } from '../store/useAvatarV2Store';
 import {
   AVATAR_PERSONALIZATION_CAPABILITIES,
@@ -141,6 +142,8 @@ export function Mirror3DEditor() {
   const [photoHint, setPhotoHint] = useState<string | null>(null);
   const [photoDraftProvenance, setPhotoDraftProvenance] = useState<PhotoDraftProvenance | null>(null);
   const [photoPrivacyDetailsExpanded, setPhotoPrivacyDetailsExpanded] = useState(false);
+  const [photoProcessorConsentPending, setPhotoProcessorConsentPending] = useState(false);
+  const [webPhotoProcessorConsent, setWebPhotoProcessorConsent] = useState(false);
   const [storedOnlyExpanded, setStoredOnlyExpanded] = useState(false);
 
   useEffect(() => {
@@ -279,8 +282,19 @@ export function Mirror3DEditor() {
     setPhotoDraftProvenance(null);
   };
 
-  const handlePhotoFitting = async () => {
+  const handlePhotoFitting = async (confirmedWebMetricsConsent = false) => {
     if (photoBusy) return;
+    const hasWebProcessorConsent = Platform.OS !== 'web'
+      || webPhotoProcessorConsent
+      || confirmedWebMetricsConsent;
+
+    if (!hasWebProcessorConsent) {
+      setPhotoProcessorConsentPending(true);
+      return;
+    }
+
+    setPhotoProcessorConsentPending(false);
+    if (confirmedWebMetricsConsent) setWebPhotoProcessorConsent(true);
     setPhotoBusy(true);
     setPhotoHint(null);
     let temporaryPhotoUri: string | null = null;
@@ -290,6 +304,21 @@ export function Mirror3DEditor() {
       if (!photo) return;
       const uri = photo.uri;
       temporaryPhotoUri = uri;
+
+      if (Platform.OS === 'web') {
+        await registerSourcePermission(
+          'photo',
+          'Web 三维形象照片拟合：输入图像在设备端处理，不发送给 Google；MediaPipe Tasks 会向 Google 发送性能与使用指标，用户已在开始检测前明确同意。',
+          {
+            processor: 'mediapipe_tasks_web',
+            input_data_upload: false,
+            metrics_provider: 'google',
+            metrics_types: ['performance', 'utilization'],
+            informed_consent: true,
+            consented_at: new Date().toISOString(),
+          },
+        );
+      }
 
       const { face, body } = await extractPhotoFitting(uri);
       if (!face && !body) {
@@ -671,11 +700,65 @@ export function Mirror3DEditor() {
                   {photoPrivacyDetailsExpanded && (
                     <Text style={{ color: D.textTertiary, fontSize: theme.font.tiny, lineHeight: 18 }}>
                       Android APK 使用随包内置的 ML Kit 人脸与 33 点姿态模型；Web 将固定版本的 MediaPipe JS 随应用打包，运行时仍会从外部 CDN/Google 下载 WASM 与模型。
-                      MediaPipe 官方说明不会发送输入图像数据，但其 Tasks API 可能发送性能与使用指标。全身照拟合体格，半身照只更新肩宽。
+                      MediaPipe 官方说明不会发送输入图像数据，但其 Tasks API 会向 Google 发送性能与使用指标；首次使用前会单独征得你的明确同意。全身照拟合体格，半身照只更新肩宽。
                       原生端若图片选择器生成应用缓存工作副本，分析结束后会尝试删除该副本。
                     </Text>
                   )}
                 </View>
+                {Platform.OS === 'web' && photoProcessorConsentPending && (
+                  <View
+                    accessibilityLabel="MediaPipe 指标处理知情同意"
+                    style={{
+                      marginTop: theme.spacing.sm,
+                      padding: theme.spacing.md,
+                      borderRadius: theme.radius.md,
+                      backgroundColor: D.surfaceAlt,
+                      borderWidth: 1,
+                      borderColor: D.borderSoft,
+                    }}
+                  >
+                    <Text style={{ color: D.textPrimary, fontSize: theme.font.small, fontWeight: '800' }}>
+                      开始前确认
+                    </Text>
+                    <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, lineHeight: 18, marginTop: 4 }}>
+                      照片输入只在设备端用于 MediaPipe 检测，不发送给 Google；MediaPipe Tasks 会向 Google 发送 API 性能与使用指标。
+                      同意后才会打开照片选择器并开始检测。
+                    </Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm, marginTop: theme.spacing.sm }}>
+                      <Pressable
+                        onPress={() => { void handlePhotoFitting(true); }}
+                        accessibilityRole="button"
+                        accessibilityLabel="同意 MediaPipe 指标处理并选择照片"
+                        style={({ pressed }) => ({
+                          minHeight: theme.touch.minTarget,
+                          justifyContent: 'center',
+                          paddingHorizontal: theme.spacing.md,
+                          borderRadius: theme.radius.md,
+                          backgroundColor: D.primary,
+                          opacity: pressed ? 0.82 : 1,
+                        })}
+                      >
+                        <Text style={{ color: '#fff', fontSize: theme.font.small, fontWeight: '800' }}>同意并继续</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => setPhotoProcessorConsentPending(false)}
+                        accessibilityRole="button"
+                        accessibilityLabel="暂不使用照片拟合"
+                        style={({ pressed }) => ({
+                          minHeight: theme.touch.minTarget,
+                          justifyContent: 'center',
+                          paddingHorizontal: theme.spacing.md,
+                          borderRadius: theme.radius.md,
+                          borderWidth: 1,
+                          borderColor: D.border,
+                          opacity: pressed ? 0.72 : 1,
+                        })}
+                      >
+                        <Text style={{ color: D.textSecondary, fontSize: theme.font.small, fontWeight: '700' }}>暂不使用</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
                 {photoHint && (
                   <Text style={{ color: D.accent, fontSize: theme.font.tiny, lineHeight: 18, marginTop: theme.spacing.xs }}>
                     {photoHint}
