@@ -1,9 +1,54 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
 const WEB_BASE = process.env.WEB_BASE ?? 'http://localhost:8081';
 const SHOTS = resolve('e2e', 'mobile-screenshots');
+
+const MEDIAPIPE_PORTRAIT_FIXTURE = {
+  url: 'https://storage.googleapis.com/mediapipe-assets/tasks/testdata/vision/portrait.jpg?generation=1782185108020964',
+  sha256: 'a6f11efaa834706db23f275b6115058fa87fc7f14362681e6abe14e82749de3e',
+  fileName: 'mediapipe-portrait.jpg',
+} as const;
+
+async function materializeMediaPipePortraitFixture(): Promise<string> {
+  const filePath = resolve(tmpdir(), `zhixingos-${MEDIAPIPE_PORTRAIT_FIXTURE.fileName}`);
+
+  const verify = (bytes: Buffer) => {
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    if (digest !== MEDIAPIPE_PORTRAIT_FIXTURE.sha256) {
+      throw new Error(`MediaPipe portrait fixture SHA-256 mismatch: ${digest}`);
+    }
+  };
+
+  if (existsSync(filePath)) {
+    const existing = readFileSync(filePath);
+    verify(existing);
+    return filePath;
+  }
+
+  const response = await fetch(MEDIAPIPE_PORTRAIT_FIXTURE.url);
+  if (!response.ok) {
+    throw new Error(`MediaPipe portrait fixture download failed: HTTP ${response.status}`);
+  }
+
+  const bytes = Buffer.from(await response.arrayBuffer());
+  verify(bytes);
+  writeFileSync(filePath, bytes);
+  return filePath;
+}
+
+function clearMediaPipePortraitFixture(filePath: string | null) {
+  if (!filePath) return;
+  try {
+    rmSync(filePath, { force: true });
+  } catch {
+    // Public CI fixture cleanup is best-effort; never fail the product test
+    // after all assertions have already completed.
+  }
+}
 
 type AvatarRuntimeProbe = {
   instanceId: string;
