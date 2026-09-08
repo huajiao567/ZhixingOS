@@ -6,6 +6,8 @@ const WEB_BASE = process.env.WEB_BASE ?? 'http://localhost:8081';
 const SHOTS = resolve('e2e', 'mobile-screenshots');
 
 type AvatarRuntimeProbe = {
+  instanceId: string;
+  evidenceTypes: string[];
   updatedAt: number;
   identity: {
     faceWidth: number;
@@ -23,11 +25,15 @@ type AvatarRuntimeProbe = {
   appearance: { skin?: string; hair?: string; outfit?: string };
 };
 
-async function readAvatarRuntimeProbe(page: Page): Promise<AvatarRuntimeProbe> {
+async function readEditorAvatarRuntimeProbe(page: Page): Promise<AvatarRuntimeProbe> {
   return page.evaluate(() => {
-    const root = window as typeof window & { __avatarRuntimeProbe?: AvatarRuntimeProbe };
-    if (!root.__avatarRuntimeProbe) throw new Error('avatar runtime probe is not ready');
-    return root.__avatarRuntimeProbe;
+    const root = window as typeof window & {
+      __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+    };
+    const probe = Object.values(root.__avatarRuntimeProbes ?? {})
+      .find((candidate) => candidate.evidenceTypes.includes('editor_preview'));
+    if (!probe) throw new Error('editor avatar runtime probe is not ready');
+    return probe;
   });
 }
 
@@ -140,14 +146,22 @@ test.describe('390x844 手机界面功能冒烟', () => {
     // 生产 VRM runtime proof：不是只验证 store/UI 值，而是读取 renderer
     // 已经应用后的 Three.js 世界变换和材质结果。
     await page.waitForFunction(() => {
-      const probe = (window as typeof window & { __avatarRuntimeProbe?: AvatarRuntimeProbe }).__avatarRuntimeProbe;
+      const root = window as typeof window & {
+        __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+      };
+      const probe = Object.values(root.__avatarRuntimeProbes ?? {})
+        .find((candidate) => candidate.evidenceTypes.includes('editor_preview'));
       return Boolean(probe?.geometry.headWorldScale && probe?.geometry.shoulderWorldDistance);
     }, undefined, { timeout: 20_000 });
-    const baselineProbe = await readAvatarRuntimeProbe(page);
+    const baselineProbe = await readEditorAvatarRuntimeProbe(page);
 
     await setIdentitySliderToEnd(page, '脸宽');
     await page.waitForFunction((baselineHeadX) => {
-      const probe = (window as typeof window & { __avatarRuntimeProbe?: AvatarRuntimeProbe }).__avatarRuntimeProbe;
+      const root = window as typeof window & {
+        __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+      };
+      const probe = Object.values(root.__avatarRuntimeProbes ?? {})
+        .find((candidate) => candidate.evidenceTypes.includes('editor_preview'));
       return Boolean(
         probe
         && probe.identity.faceWidth > 0.98
@@ -155,12 +169,16 @@ test.describe('390x844 手机界面功能冒烟', () => {
         && probe.geometry.headWorldScale.x > baselineHeadX + 0.02,
       );
     }, baselineProbe.geometry.headWorldScale!.x, { timeout: 15_000 });
-    const faceProbe = await readAvatarRuntimeProbe(page);
+    const faceProbe = await readEditorAvatarRuntimeProbe(page);
     await screenshot(page, '02a-avatar-face-width-runtime');
 
     await setIdentitySliderToEnd(page, '身体比例');
     await page.waitForFunction(({ previousGroupX, expectedHeadX }) => {
-      const probe = (window as typeof window & { __avatarRuntimeProbe?: AvatarRuntimeProbe }).__avatarRuntimeProbe;
+      const root = window as typeof window & {
+        __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+      };
+      const probe = Object.values(root.__avatarRuntimeProbes ?? {})
+        .find((candidate) => candidate.evidenceTypes.includes('editor_preview'));
       return Boolean(
         probe
         && probe.identity.bodyScale > 0.98
@@ -172,11 +190,15 @@ test.describe('390x844 手机界面功能冒烟', () => {
       previousGroupX: faceProbe.geometry.groupScale.x,
       expectedHeadX: faceProbe.geometry.headWorldScale!.x,
     }, { timeout: 15_000 });
-    const bodyProbe = await readAvatarRuntimeProbe(page);
+    const bodyProbe = await readEditorAvatarRuntimeProbe(page);
 
     await setIdentitySliderToEnd(page, '肩宽');
     await page.waitForFunction((previousShoulderDistance) => {
-      const probe = (window as typeof window & { __avatarRuntimeProbe?: AvatarRuntimeProbe }).__avatarRuntimeProbe;
+      const root = window as typeof window & {
+        __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+      };
+      const probe = Object.values(root.__avatarRuntimeProbes ?? {})
+        .find((candidate) => candidate.evidenceTypes.includes('editor_preview'));
       return Boolean(
         probe
         && probe.identity.shoulderWidth > 0.98
@@ -184,16 +206,20 @@ test.describe('390x844 手机界面功能冒烟', () => {
         && probe.geometry.shoulderWorldDistance > previousShoulderDistance * 1.02,
       );
     }, bodyProbe.geometry.shoulderWorldDistance!, { timeout: 15_000 });
-    const shoulderProbe = await readAvatarRuntimeProbe(page);
+    const shoulderProbe = await readEditorAvatarRuntimeProbe(page);
 
     // 当前模型的 eyeSize 是 stored-only：值可以进入预览 profile，但不能偷偷改变
     // 已验证的头部/身体/肩部几何通道。
     await setIdentitySliderToEnd(page, '眼睛大小');
     await page.waitForFunction(() => {
-      const probe = (window as typeof window & { __avatarRuntimeProbe?: AvatarRuntimeProbe }).__avatarRuntimeProbe;
+      const root = window as typeof window & {
+        __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+      };
+      const probe = Object.values(root.__avatarRuntimeProbes ?? {})
+        .find((candidate) => candidate.evidenceTypes.includes('editor_preview'));
       return Boolean(probe && probe.identity.eyeSize > 0.98);
     }, undefined, { timeout: 10_000 });
-    const storedOnlyProbe = await readAvatarRuntimeProbe(page);
+    const storedOnlyProbe = await readEditorAvatarRuntimeProbe(page);
     expect(Math.abs(storedOnlyProbe.geometry.headWorldScale!.x - shoulderProbe.geometry.headWorldScale!.x)).toBeLessThan(0.004);
     expect(Math.abs(storedOnlyProbe.geometry.groupScale.x - shoulderProbe.geometry.groupScale.x)).toBeLessThan(0.004);
     expect(Math.abs(storedOnlyProbe.geometry.shoulderWorldDistance! - shoulderProbe.geometry.shoulderWorldDistance!)).toBeLessThan(0.004);
@@ -201,7 +227,11 @@ test.describe('390x844 手机界面功能冒烟', () => {
     const outfitBefore = storedOnlyProbe.appearance.outfit;
     await page.getByRole('button', { name: /服装色青碧/ }).click();
     await page.waitForFunction((previousOutfit) => {
-      const probe = (window as typeof window & { __avatarRuntimeProbe?: AvatarRuntimeProbe }).__avatarRuntimeProbe;
+      const root = window as typeof window & {
+        __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+      };
+      const probe = Object.values(root.__avatarRuntimeProbes ?? {})
+        .find((candidate) => candidate.evidenceTypes.includes('editor_preview'));
       return Boolean(probe?.appearance.outfit && probe.appearance.outfit !== previousOutfit);
     }, outfitBefore, { timeout: 10_000 });
     await screenshot(page, '02b-avatar-runtime-personalized');
