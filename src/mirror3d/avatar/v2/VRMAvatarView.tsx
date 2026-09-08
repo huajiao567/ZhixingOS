@@ -62,6 +62,8 @@ export interface AvatarLoadState {
 }
 
 export interface AvatarRuntimeProbe {
+  instanceId: string;
+  evidenceTypes: string[];
   updatedAt: number;
   identity: {
     faceWidth: number;
@@ -554,12 +556,25 @@ function reportAvatarLoad(phase: AvatarLoadPhase, details: Omit<AvatarLoadState,
   root.__avatarLoadState = currentAvatarLoadState;
 }
 
+let avatarRuntimeProbeInstanceSequence = 0;
+
 function reportAvatarRuntimeProbe(probe: AvatarRuntimeProbe) {
   if (typeof globalThis === 'undefined') return;
   const root = globalThis as typeof globalThis & {
     __avatarRuntimeProbe?: AvatarRuntimeProbe;
+    __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
   };
   root.__avatarRuntimeProbe = probe;
+  root.__avatarRuntimeProbes ??= {};
+  root.__avatarRuntimeProbes[probe.instanceId] = probe;
+}
+
+function removeAvatarRuntimeProbe(instanceId: string) {
+  if (typeof globalThis === 'undefined') return;
+  const root = globalThis as typeof globalThis & {
+    __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+  };
+  delete root.__avatarRuntimeProbes?.[instanceId];
 }
 
 async function loadModelSourceCached(url: string): Promise<ArrayBuffer> {
@@ -629,6 +644,9 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
   const groupRef = useRef<THREE.Group>(null);
   const [model, setModel] = useState<THREE.Group | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
+  const [runtimeProbeInstanceId] = useState(
+    () => `avatar-runtime-${++avatarRuntimeProbeInstanceSequence}`,
+  );
 
   const bonesRef = useRef<FoundBones>(
     { leftUpperArm: null, rightUpperArm: null, leftLowerArm: null, rightLowerArm: null, leftShoulder: null, rightShoulder: null, spine: null, chest: null, head: null, neck: null, leftEye: null, rightEye: null }
@@ -962,6 +980,7 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
 
     return () => {
       disposed = true;
+      removeAvatarRuntimeProbe(runtimeProbeInstanceId);
       const overlay = fatigueOverlayRef.current;
       if (overlay) {
         overlay.traverse((child) => {
@@ -974,7 +993,7 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
       fatigueOverlayRef.current = null;
       fatigueMaterialsRef.current = [];
     };
-  }, [url, onLoaded, onError]);
+  }, [url, onLoaded, onError, runtimeProbeInstanceId]);
 
   // 用户确认的肤色/发色/服装色只作用于明确识别出的材质。
   // 每次都从首次缓存的原始材质颜色重新混合，避免热更新或多次保存造成颜色累积漂移。
@@ -1604,6 +1623,8 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
       const face = profile.identity.faceMorphs ?? {};
       const body = profile.identity.bodyMorphs ?? {};
       reportAvatarRuntimeProbe({
+        instanceId: runtimeProbeInstanceId,
+        evidenceTypes: [...profile.dailyState.evidenceTypes],
         updatedAt: Date.now(),
         identity: {
           faceWidth: face.faceWidth ?? 0.5,
