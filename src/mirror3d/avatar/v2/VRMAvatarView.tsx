@@ -3,8 +3,8 @@
  *
  * 借鉴AIRI开源项目(https://github.com/moeru-ai/airi)的动画系统实现：
  *   - VRM/GLB模型加载与SkinnedMesh渲染
- *   - 模块级Promise缓存（解决React StrictMode双重挂载ERR_ABORTED）
- *   - VRMUtils性能优化（removeUnnecessaryVertices · combineSkeletons，仅执行一次）
+ *   - 只缓存不可变 GLB 二进制源；每个渲染实例独立解析 scene/skeleton/VRM runtime
+ *   - VRMUtils性能优化（removeUnnecessaryVertices · combineSkeletons，每个独立实例执行）
  *   - AIRI风格精确包围盒计算（mesh-only · world-space · 排除碰撞器）
  *   - 自动胸像构图（38-42°中长焦 · 人像摄影标准 · pivot上移1/5）
  *   - T-pose → A-pose自然手臂姿势修正
@@ -499,11 +499,13 @@ function deriveEmotionFromState(dailyState: AvatarProfileV2['dailyState']): stri
   return 'neutral';
 }
 
-/* ───────────── 模块级模型缓存（解决React StrictMode双重挂载ERR_ABORTED） ───────────── */
-const _sharedLoader = new GLTFLoader();
-_sharedLoader.register(((parser: any) => new VRMLoaderPlugin(parser)) as any);
-const modelCache = new Map<string, Promise<GLTF>>();
-const optimizedUrls = new Set<string>();
+/* ───────────── 不可变模型源缓存 ─────────────
+ * 只能共享原始 GLB bytes，绝不能共享已解析的 GLTF.scene/VRM runtime。
+ * scene、骨骼、expressionManager、lookAt、springBone 都是可变对象；跨多个
+ * AvatarCanvas 共享会让后挂载实例把前一个实例的身份变形当成“原始基线”，
+ * 造成 1.06^N 一类跨屏累积污染。
+ */
+const modelSourceCache = new Map<string, Promise<ArrayBuffer>>();
 let currentAvatarLoadState: AvatarLoadState = { phase: 'idle' };
 const avatarLoadListeners = new Set<(state: AvatarLoadState) => void>();
 const avatarLoadPhaseRank: Record<AvatarLoadPhase, number> = {
@@ -560,53 +562,66 @@ function reportAvatarRuntimeProbe(probe: AvatarRuntimeProbe) {
   root.__avatarRuntimeProbe = probe;
 }
 
-function loadGLTFCached(url: string): Promise<GLTF> {
-  let cached = modelCache.get(url);
+async function loadModelSourceCached(url: string): Promise<ArrayBuffer> {
+  let cached = modelSourceCache.get(url);
   if (!cached) {
     reportAvatarLoad('requesting', { url, loaded: 0, total: 0 });
-    cached = new Promise<GLTF>((resolve, reject) => {
-      let settled = false;
-      _sharedLoader.load(url, (gltf) => {
-        settled = true;
+    cached = fetch(url)
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Avatar model request failed: HTTP ${response.status}`);
+        }
+        const buffer = await response.arrayBuffer();
+        const headerTotal = Number(response.headers.get('content-length') ?? 0);
+        reportAvatarLoad('requesting', {
+          url,
+          loaded: buffer.byteLength,
+          total: headerTotal > 0 ? headerTotal : buffer.byteLength,
+        });
+        return buffer;
+      })
+      .catch((error) => {
+        modelSourceCache.delete(url);
+        reportAvatarLoad('error', {
+          url,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      });
+    modelSourceCache.set(url, cached);
+  }
+  return cached;
+}
+
+async function loadGLTFInstance(url: string): Promise<GLTF> {
+  const source = await loadModelSourceCached(url);
+
+  return new Promise<GLTF>((resolve, reject) => {
+    const loader = new GLTFLoader();
+    loader.register(((parser: any) => new VRMLoaderPlugin(parser)) as any);
+    loader.parse(
+      source,
+      '',
+      (gltf) => {
         reportAvatarLoad('parsed', { url });
-        if (!optimizedUrls.has(url)) {
-          optimizedUrls.add(url);
-          const vrm: VRM | undefined = (gltf as any).userData?.vrm;
-          if (vrm) {
-            reportAvatarLoad('optimizing', { url });
-            VRMUtils.removeUnnecessaryVertices(vrm.scene);
-            VRMUtils.combineSkeletons(vrm.scene);
-          }
+        const vrm: VRM | undefined = (gltf as any).userData?.vrm;
+        if (vrm) {
+          reportAvatarLoad('optimizing', { url });
+          VRMUtils.removeUnnecessaryVertices(vrm.scene);
+          VRMUtils.combineSkeletons(vrm.scene);
         }
         reportAvatarLoad('loaded', { url });
         resolve(gltf);
-      }, (event) => {
-        if (settled) return;
-        reportAvatarLoad('requesting', {
+      },
+      (error) => {
+        reportAvatarLoad('error', {
           url,
-          loaded: event.loaded,
-          total: event.total,
+          message: error instanceof Error ? error.message : String(error),
         });
-      }, (err) => {
-        settled = true;
-        reportAvatarLoad('error', { url, message: String(err) });
-        // 失败时立即从缓存中移除，允许立即重试
-        modelCache.delete(url);
-        // 对于AbortError（StrictMode双重挂载导致），延迟50ms后reject
-        // 给第二个挂载点一个机会创建新请求
-        const errorRecord = err as unknown as { type?: string; name?: string; message?: string };
-        const isAbort = errorRecord?.type === 'abort' || errorRecord?.name === 'AbortError' ||
-          (errorRecord?.message && (errorRecord.message.includes('abort') || errorRecord.message.includes('ABORT')));
-        if (isAbort) {
-          setTimeout(() => reject(err), 80);
-        } else {
-          reject(err);
-        }
-      });
-    });
-    modelCache.set(url, cached);
-  }
-  return cached;
+        reject(error);
+      },
+    );
+  });
 }
 
 /* ───────────── GLB Model ───────────── */
@@ -656,7 +671,7 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
     (async () => {
       try {
         reportAvatarLoad('effect-start', { url });
-        const gltf = await loadGLTFCached(url);
+        const gltf = await loadGLTFInstance(url);
         if (disposed) {
           reportAvatarLoad('discarded', { url });
           return;
