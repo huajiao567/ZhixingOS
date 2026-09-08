@@ -24,7 +24,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { AvatarProfileV2 } from './avatarTypes';
 import { useAppTheme } from '../../../theme/theme';
-import { VRMAvatarView, subscribeAvatarLoad, type AvatarLoadState } from './VRMAvatarView';
+import { VRMAvatarView, type AvatarLoadState } from './VRMAvatarView';
 
 // 交给 Metro 管理，确保 development、production Web 导出和原生 APK 都引用同一份真实模型。
 const BUNDLED_VRM = require('../../../../public/avatar/AvatarSample_G.glb') as string;
@@ -303,9 +303,10 @@ interface StageProps {
   onAvatarPress?: () => void;
   triggerAcknowledge?: number;
   triggerTouchReaction?: number;
+  onLoadStateChange: (state: AvatarLoadState) => void;
 }
 
-function Stage({ profile, paused, framing, onAvatarPress, triggerAcknowledge, triggerTouchReaction, onRenderError }: StageProps & { onRenderError: () => void }) {
+function Stage({ profile, paused, framing, onAvatarPress, triggerAcknowledge, triggerTouchReaction, onLoadStateChange, onRenderError }: StageProps & { onRenderError: () => void }) {
   const theme = useAppTheme();
 
   return (
@@ -343,6 +344,7 @@ function Stage({ profile, paused, framing, onAvatarPress, triggerAcknowledge, tr
             onAvatarPress={onAvatarPress}
             triggerAcknowledge={triggerAcknowledge}
             triggerTouchReaction={triggerTouchReaction}
+            onLoadStateChange={onLoadStateChange}
             onError={onRenderError}
           />
         </Suspense>
@@ -378,8 +380,6 @@ export function AvatarModelView({
   const [hintVisible, setHintVisible] = useState(true);
   const [renderFailed, setRenderFailed] = useState(false);
   const [loadState, setLoadState] = useState<AvatarLoadState>({ phase: 'idle' });
-
-  useEffect(() => subscribeAvatarLoad(setLoadState), []);
 
   // 手机端（宽度<600）适配参数
   const isNarrow = screenWidth < 600;
@@ -477,6 +477,7 @@ export function AvatarModelView({
             onAvatarPress={onAvatarPress}
             triggerAcknowledge={triggerAcknowledge}
             triggerTouchReaction={triggerTouchReaction}
+            onLoadStateChange={setLoadState}
             onRenderError={() => setRenderFailed(true)}
           />
         </Suspense>
