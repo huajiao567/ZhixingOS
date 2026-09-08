@@ -173,6 +173,8 @@ test.describe('390x844 手机界面功能冒烟', () => {
     const faceWidthRatio = faceProbe.geometry.headWorldScale!.x / baselineProbe.geometry.headWorldScale!.x;
     expect(faceWidthRatio).toBeGreaterThan(1.045);
     expect(faceWidthRatio).toBeLessThan(1.075);
+    await expect(page.getByLabel(/^脸宽，/).first()).toBeVisible();
+    await expect(page.getByText(/V2 · 身份 1\.0\.0/).first()).toBeVisible();
     await screenshot(page, '02a-avatar-face-width-runtime');
 
     await setIdentitySliderToEnd(page, '身体比例');
