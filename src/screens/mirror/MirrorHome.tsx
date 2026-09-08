@@ -735,6 +735,7 @@ export function MirrorHome() {
               <AvatarCanvasFlagged
                 profile={avatarProfile}
                 paused={!isFocused}
+                active={isFocused}
                 fill
                 style={{ backgroundColor: 'transparent' }}
                 triggerTouchReaction={avatarTouchTrigger}

@@ -18,13 +18,13 @@
  * 模型来源与许可证：见 THIRD_PARTY_ASSETS.md；该文件的嵌入 VRM 元数据允许
  * 商业使用、修改和再分发，但并非以 CC0 为依据。
  */
-import React, { Component, useEffect, useState, Suspense, type ErrorInfo, type ReactNode } from 'react';
+import React, { Component, useCallback, useEffect, useState, Suspense, type ErrorInfo, type ReactNode } from 'react';
 import { Platform, Text, View, Pressable, useWindowDimensions } from 'react-native';
 import { Canvas, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { AvatarProfileV2 } from './avatarTypes';
 import { useAppTheme } from '../../../theme/theme';
-import { VRMAvatarView, subscribeAvatarLoad, type AvatarLoadState } from './VRMAvatarView';
+import { VRMAvatarView, type AvatarLoadState } from './VRMAvatarView';
 
 // 交给 Metro 管理，确保 development、production Web 导出和原生 APK 都引用同一份真实模型。
 const BUNDLED_VRM = require('../../../../public/avatar/AvatarSample_G.glb') as string;
@@ -303,9 +303,11 @@ interface StageProps {
   onAvatarPress?: () => void;
   triggerAcknowledge?: number;
   triggerTouchReaction?: number;
+  onLoadStateChange: (state: AvatarLoadState) => void;
+  maxDpr: number;
 }
 
-function Stage({ profile, paused, framing, onAvatarPress, triggerAcknowledge, triggerTouchReaction, onRenderError }: StageProps & { onRenderError: () => void }) {
+function Stage({ profile, paused, framing, onAvatarPress, triggerAcknowledge, triggerTouchReaction, onLoadStateChange, maxDpr, onRenderError }: StageProps & { onRenderError: () => void }) {
   const theme = useAppTheme();
 
   return (
@@ -314,7 +316,7 @@ function Stage({ profile, paused, framing, onAvatarPress, triggerAcknowledge, tr
         style={{ flex: 1, width: '100%', height: '100%' }}
         camera={{ position: [0, 1.35, 1.5], fov: 30, near: 0.05, far: 100 }}
         frameloop={paused ? 'never' : 'always'}
-        dpr={[1, 2]}
+        dpr={[1, maxDpr]}
         shadows={{ type: THREE.PCFShadowMap }}
         gl={{
           antialias: true,
@@ -343,6 +345,7 @@ function Stage({ profile, paused, framing, onAvatarPress, triggerAcknowledge, tr
             onAvatarPress={onAvatarPress}
             triggerAcknowledge={triggerAcknowledge}
             triggerTouchReaction={triggerTouchReaction}
+            onLoadStateChange={onLoadStateChange}
             onError={onRenderError}
           />
         </Suspense>
@@ -378,12 +381,14 @@ export function AvatarModelView({
   const [hintVisible, setHintVisible] = useState(true);
   const [renderFailed, setRenderFailed] = useState(false);
   const [loadState, setLoadState] = useState<AvatarLoadState>({ phase: 'idle' });
-
-  useEffect(() => subscribeAvatarLoad(setLoadState), []);
+  const handleRenderError = useCallback(() => setRenderFailed(true), []);
 
   // 手机端（宽度<600）适配参数
   const isNarrow = screenWidth < 600;
   const isCompactPhone = screenWidth < 420;
+  // 正式 VRM 在移动端持续保留自然动作，但避免高 DPR 软件/集成 GPU
+  // 把主线程和 WebGL 渲染线程压满。390px 手机优先交互稳定性，桌面仍保留 2x 上限。
+  const maxDpr = isCompactPhone ? 1.25 : isNarrow ? 1.5 : 2;
   // 注意：AvatarModelView在3D舞台区域内部，控件位置相对于舞台而非屏幕
   // 手机端：舞台下方是三镜卡片，控件只需距离舞台底部足够边距
   const controlBottom = isNarrow ? (isCompactPhone ? 16 : 20) : 24;
@@ -467,7 +472,7 @@ export function AvatarModelView({
   const failureFallback = <ThreeStatus reason={webgl ? 'error' : 'webgl'} />;
   if (!webgl || renderFailed) return <>{failureFallback}</>;
   return (
-    <AvatarCanvasErrorBoundary fallback={failureFallback} onError={() => setRenderFailed(true)}>
+    <AvatarCanvasErrorBoundary fallback={failureFallback} onError={handleRenderError}>
       <View style={{ flex: 1, width: '100%', height: '100%', position: 'relative', pointerEvents: 'box-none' }}>
         <Suspense fallback={<ThreeStatus reason="loading" />}>
           <Stage
@@ -477,7 +482,9 @@ export function AvatarModelView({
             onAvatarPress={onAvatarPress}
             triggerAcknowledge={triggerAcknowledge}
             triggerTouchReaction={triggerTouchReaction}
-            onRenderError={() => setRenderFailed(true)}
+            onLoadStateChange={setLoadState}
+            maxDpr={maxDpr}
+            onRenderError={handleRenderError}
           />
         </Suspense>
 

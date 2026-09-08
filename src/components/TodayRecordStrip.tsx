@@ -71,6 +71,8 @@ export function TodayRecordStrip({ events }: { events: LifeEvent[] }) {
           {today.slice(0, 3).map((event, index) => (
             <View
               key={event.id}
+              accessible
+              accessibilityLabel={`今天记录，${journalSourceLabel(event.sourceRef)}，${timeLabel(event.startTime)}，${recordText(event)}`}
               style={[styles.row, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.borderSoft }]}
             >
               <Text style={[styles.time, { color: theme.colors.textTertiary }]}>{timeLabel(event.startTime)}</Text>

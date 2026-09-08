@@ -7,6 +7,7 @@ import { useAppTheme } from '../../theme/theme';
 interface Mirror3DPanelProps {
   height?: number;
   paused?: boolean;
+  active?: boolean;
   onOpenEditor?: () => void;
 }
 
@@ -16,6 +17,7 @@ interface Mirror3DPanelProps {
 export function Mirror3DPanel({
   height = 360,
   paused,
+  active = true,
   onOpenEditor,
 }: Mirror3DPanelProps) {
   const theme = useAppTheme();
@@ -34,7 +36,7 @@ export function Mirror3DPanel({
   return (
     <View style={{ backgroundColor: theme.colors.surface, borderRadius: theme.radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.borderSoft }}>
       <View style={{ height, alignItems: 'center', justifyContent: 'center' }}>
-        <AvatarCanvasFlagged profile={avatarProfile} paused={paused} size={Math.min(height * 0.9, 320)} />
+        <AvatarCanvasFlagged profile={avatarProfile} paused={paused} active={active} size={Math.min(height * 0.9, 320)} />
       </View>
       <View style={{ padding: theme.spacing.md }}>
         <Text style={{ color: theme.colors.textPrimary, fontWeight: '800', fontSize: theme.font.body }}>今天的镜像</Text>
