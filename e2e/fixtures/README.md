@@ -15,4 +15,4 @@ The mobile Web E2E downloads the following official MediaPipe test asset at runt
 
 The fixture is test input only. It is not user data, is not copied into Avatar persistence, and is not uploaded as an E2E artifact by this test. The runtime test also checks that ZhixingOS backend request bodies do not contain the fixture filename, `blob:`, `data:image`, or `file://` references.
 
-This fixture proves the Web path only: explicit MediaPipe metrics consent → browser file chooser → MediaPipe Web detection → Avatar draft → production VRM preview → explicit confirmation → Timeline. It does not validate Android/iOS native image pickers, native ML Kit execution, or physical devices.
+This fixture proves the Web path only: explicit MediaPipe metrics consent → browser file chooser → consent-gated same-origin MediaPipe JS chunk → pinned external WASM/model downloads → MediaPipe Web detection → Avatar draft → production VRM preview → explicit confirmation → Timeline. It does not validate Android/iOS native image pickers, native ML Kit execution, or physical devices.
