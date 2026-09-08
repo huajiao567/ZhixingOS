@@ -90,6 +90,26 @@ export interface AvatarRuntimeProbe {
     hair?: string;
     outfit?: string;
   };
+  /**
+   * Browser/runtime diagnostics for motions that have already reached the
+   * production VRM renderer. This is test evidence, not a scientific model of
+   * the user or a promise that a single sampled frame looks subjectively right.
+   */
+  motion: {
+    elapsed: number;
+    blinkActive: boolean;
+    blinkPhase: BlinkPhase;
+    blinkAmount: number;
+    blinkCycleCount: number;
+    breathPhase: number;
+    breathAmount: number;
+    gazeTarget: { x: number; y: number; z: number };
+    acknowledgeActive: boolean;
+    acknowledgeProgress: number;
+    acknowledgeTrigger: number;
+    acknowledgeNod: number;
+    acknowledgeSpineRelax: number;
+  };
 }
 
 // 相机构图基线由 Web 与 Native 共用；不能依赖 window，否则 Android 首帧会崩溃。
@@ -275,6 +295,7 @@ interface NaturalMotionState {
   blinkActive: boolean;
   blinkPhase: BlinkPhase;
   blinkProgress: number;
+  blinkCycleCount: number;
   nextBlinkTime: number;
   /** 闭合阶段持续时间 */
   blinkCloseDuration: number;
@@ -315,6 +336,7 @@ function createInitialMotionState(): NaturalMotionState {
     blinkActive: false,
     blinkPhase: 'closing',
     blinkProgress: 0,
+    blinkCycleCount: 0,
     nextBlinkTime: 1.5 + Math.random() * 2.5,
     // AIRI风格非对称生物眨眼：快闭75ms(easeOutQuart) → 闭合10-30ms → 慢睁150-250ms(easeInOutCubic)
     blinkCloseDuration: 0.065 + Math.random() * 0.02,
@@ -1053,6 +1075,7 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
       state.acknowledge.active = true;
       state.acknowledge.progress = 0;
       state.acknowledge.duration = 0.9;
+      state.acknowledge.lastTrigger = triggerAcknowledge;
     }
   }, [triggerAcknowledge]);
 
@@ -1365,6 +1388,7 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
       state.blinkActive = true;
       state.blinkPhase = 'closing';
       state.blinkProgress = 0;
+      state.blinkCycleCount += 1;
       // 随机化各阶段时长（避免机械感）
       state.blinkCloseDuration = (0.065 + Math.random() * 0.02) / ts;
       state.blinkHoldDuration = (0.01 + Math.random() * 0.02) / ts;
@@ -1665,6 +1689,25 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
           shoulderWorldDistance,
         },
         appearance: appearanceProbeRef.current,
+        motion: {
+          elapsed: state.elapsed,
+          blinkActive: state.blinkActive,
+          blinkPhase: state.blinkPhase,
+          blinkAmount,
+          blinkCycleCount: state.blinkCycleCount,
+          breathPhase: state.breathPhase,
+          breathAmount,
+          gazeTarget: {
+            x: lookAtSmoothRef.current.x,
+            y: lookAtSmoothRef.current.y,
+            z: lookAtSmoothRef.current.z,
+          },
+          acknowledgeActive: state.acknowledge.active,
+          acknowledgeProgress: state.acknowledge.progress,
+          acknowledgeTrigger: state.acknowledge.lastTrigger,
+          acknowledgeNod: ackNod,
+          acknowledgeSpineRelax: ackSpineRelax,
+        },
       });
     }
   });
