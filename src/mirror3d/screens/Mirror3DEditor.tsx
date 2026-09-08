@@ -142,6 +142,7 @@ export function Mirror3DEditor() {
   const [photoHint, setPhotoHint] = useState<string | null>(null);
   const [photoDraftProvenance, setPhotoDraftProvenance] = useState<PhotoDraftProvenance | null>(null);
   const [photoPrivacyDetailsExpanded, setPhotoPrivacyDetailsExpanded] = useState(false);
+  const [photoDraftDetailsExpanded, setPhotoDraftDetailsExpanded] = useState(false);
   const [photoProcessorConsentPending, setPhotoProcessorConsentPending] = useState(false);
   const [webPhotoProcessorConsent, setWebPhotoProcessorConsent] = useState(false);
   const [storedOnlyExpanded, setStoredOnlyExpanded] = useState(false);
@@ -240,7 +241,7 @@ export function Mirror3DEditor() {
     const photoSourceRef = photoDraftProvenance?.sourceRef;
     const sourceMode = photoSourceRef ? 'photo_assisted' : 'manual';
     const versionNote = photoSourceRef
-      ? `来自三维镜像编辑器；照片只在本地生成预览草稿。正式版本仅保留不含原始路径的不透明来源凭据 ${photoSourceRef} 与用户确认后的参数，不保存图片路径或原始像素。`
+      ? `来自三维镜像编辑器；照片只在本地生成预览草稿。正式版本仅保留不含原始路径的不透明来源凭据 ${photoSourceRef} 与用户确认后的参数，不保存图片路径或原始像素。用户确认表示接受该版本，不等于系统证明照片中的身份匹配、人体测量精度或本人相似度正确。`
       : '来自三维镜像编辑器的手动调整；保存动作由用户明确触发，未关联照片来源。';
 
     confirmPersonalization(
@@ -269,8 +270,9 @@ export function Mirror3DEditor() {
       photoSourceRef,
     );
     setPhotoDraftProvenance(null);
+    setPhotoDraftDetailsExpanded(false);
     setPhotoHint(photoSourceRef
-      ? '已确认并保存。正式版本只保留不透明照片来源凭据，不保存原始路径或像素。'
+      ? '已确认并保存。确认表示你接受这个版本，不代表系统已验证身份匹配、人体测量精度或本人相似度。'
       : '已保存到正式数字孪生，并写入新的身份版本。');
   };
 
@@ -280,6 +282,7 @@ export function Mirror3DEditor() {
     setScActive(null);
     setDiary('');
     setPhotoDraftProvenance(null);
+    setPhotoDraftDetailsExpanded(false);
   };
 
   const handlePhotoFitting = async (confirmedWebMetricsConsent = false) => {
@@ -297,6 +300,7 @@ export function Mirror3DEditor() {
     if (confirmedWebMetricsConsent) setWebPhotoProcessorConsent(true);
     setPhotoBusy(true);
     setPhotoHint(null);
+    setPhotoDraftDetailsExpanded(false);
     let temporaryPhotoUri: string | null = null;
     try {
       // 不做正方形裁剪：体格拟合需要保留全身比例
@@ -777,14 +781,40 @@ export function Mirror3DEditor() {
                     }}
                   >
                     <Text style={{ color: D.textPrimary, fontSize: theme.font.tiny, fontWeight: '700' }}>
-                      照片拟合草稿 · 仅本地分析 · 待确认
+                      照片拟合草稿 · 待确认
+                    </Text>
+                    <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, lineHeight: 16, marginTop: 2 }}>
+                      已更新：{photoDraftProvenance.fittedParts.join('、') || '无可用结构参数'}
                     </Text>
                     <Text style={{ color: D.textTertiary, fontSize: theme.font.tiny, lineHeight: 16, marginTop: 2 }}>
-                      {photoDraftProvenance.width}×{photoDraftProvenance.height} · 来源凭据 {photoDraftProvenance.sourceRef}
+                      已映射并渲染 ≠ 身份匹配、人体测量精度或本人相似度已验证。
                     </Text>
-                    <Text style={{ color: D.textTertiary, fontSize: theme.font.tiny, lineHeight: 16, marginTop: 2 }}>
-                      正式版本只会保存确认后的参数与该不透明来源凭据；不会保存原始照片路径或像素。
-                    </Text>
+                    <Pressable
+                      onPress={() => setPhotoDraftDetailsExpanded((value) => !value)}
+                      accessibilityRole="button"
+                      accessibilityLabel={photoDraftDetailsExpanded ? '收起照片拟合来源与隐私详情' : '展开照片拟合来源与隐私详情'}
+                      style={({ pressed }) => ({
+                        minHeight: theme.touch.minTarget,
+                        alignSelf: 'flex-start',
+                        justifyContent: 'center',
+                        marginTop: 2,
+                        opacity: pressed ? 0.7 : 1,
+                      })}
+                    >
+                      <Text style={{ color: D.teal, fontSize: theme.font.tiny, fontWeight: '700' }}>
+                        来源与隐私详情 {photoDraftDetailsExpanded ? '⌃' : '⌄'}
+                      </Text>
+                    </Pressable>
+                    {photoDraftDetailsExpanded && (
+                      <>
+                        <Text style={{ color: D.textTertiary, fontSize: theme.font.tiny, lineHeight: 16 }}>
+                          {photoDraftProvenance.width}×{photoDraftProvenance.height} · 来源凭据 {photoDraftProvenance.sourceRef}
+                        </Text>
+                        <Text style={{ color: D.textTertiary, fontSize: theme.font.tiny, lineHeight: 16, marginTop: 2 }}>
+                          正式版本只会保存确认后的参数与该不透明来源凭据；不会保存原始照片路径或像素。
+                        </Text>
+                      </>
+                    )}
                   </View>
                 )}
               </Section>
