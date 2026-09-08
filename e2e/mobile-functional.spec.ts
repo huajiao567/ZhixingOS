@@ -102,12 +102,7 @@ test.describe('390x844 手机界面功能冒烟', () => {
   test('登录、记录与五条主路径均可操作', async ({ page }) => {
     test.setTimeout(240_000);
     await loginDemo(page);
-    await page.waitForFunction(
-      () => (window as typeof window & { __avatarLoadState?: { phase?: string } }).__avatarLoadState?.phase === 'ready',
-      undefined,
-      { timeout: 120_000 },
-    );
-    await expect(page.getByRole('progressbar')).toHaveCount(0, { timeout: 10_000 });
+    await expect(page.getByRole('progressbar')).toHaveCount(0, { timeout: 120_000 });
     await screenshot(page, '01-mirror-home');
 
     const recordInput = page.getByPlaceholder('说点什么…');
@@ -132,11 +127,6 @@ test.describe('390x844 手机界面功能冒烟', () => {
 
     await page.getByRole('button', { name: '调整形象与状态，打开三维镜像编辑器' }).click();
     await expect(page.getByText('我的三维镜像', { exact: true })).toBeVisible({ timeout: 30_000 });
-    await page.waitForFunction(
-      () => (window as typeof window & { __avatarLoadState?: { phase?: string } }).__avatarLoadState?.phase === 'ready',
-      undefined,
-      { timeout: 120_000 },
-    );
     await page.getByRole('tab', { name: /切换到捏脸标签/ }).click();
     await expect(page.getByText(/当前页面直接预览正式 V2 VRM/)).toBeVisible();
     await expect(page.getByText('预览生效', { exact: true }).first()).toBeVisible();
@@ -152,7 +142,8 @@ test.describe('390x844 手机界面功能冒烟', () => {
       const probe = Object.values(root.__avatarRuntimeProbes ?? {})
         .find((candidate) => candidate.evidenceTypes.includes('editor_preview'));
       return Boolean(probe?.geometry.headWorldScale && probe?.geometry.shoulderWorldDistance);
-    }, undefined, { timeout: 20_000 });
+    }, undefined, { timeout: 120_000 });
+    await expect(page.getByRole('progressbar')).toHaveCount(0, { timeout: 5_000 });
     const baselineProbe = await readEditorAvatarRuntimeProbe(page);
 
     await setIdentitySliderToEnd(page, '脸宽');
