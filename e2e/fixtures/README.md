@@ -11,6 +11,7 @@ The mobile Web E2E downloads the following official MediaPipe test asset at runt
 - SHA-256: `a6f11efaa834706db23f275b6115058fa87fc7f14362681e6abe14e82749de3e`
 - Declared package license: Apache License 2.0 (`mediapipe/tasks/testdata/vision/BUILD` declares `licenses = ["notice"]  # Apache 2.0`)
 - Source mapping: MediaPipe `third_party/external_files.bzl` pins the same URL and SHA-256.
+- MediaPipe Web privacy reference: `mediapipe/tasks/web/vision/README.md` states that input data is processed on-device and is not sent to Google servers, while Tasks APIs may send performance/utilization metrics.
 
 The fixture is test input only. It is not user data, is not copied into Avatar persistence, and is not uploaded as an E2E artifact by this test. The runtime test also checks that ZhixingOS backend request bodies do not contain the fixture filename, `blob:`, `data:image`, or `file://` references.
 
