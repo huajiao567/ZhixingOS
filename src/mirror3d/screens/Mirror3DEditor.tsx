@@ -140,6 +140,7 @@ export function Mirror3DEditor() {
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoHint, setPhotoHint] = useState<string | null>(null);
   const [photoDraftProvenance, setPhotoDraftProvenance] = useState<PhotoDraftProvenance | null>(null);
+  const [photoPrivacyDetailsExpanded, setPhotoPrivacyDetailsExpanded] = useState(false);
   const [storedOnlyExpanded, setStoredOnlyExpanded] = useState(false);
 
   useEffect(() => {
@@ -644,11 +645,36 @@ export function Mirror3DEditor() {
                     </Text>
                   )}
                 </Pressable>
-                <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, lineHeight: 18, marginTop: theme.spacing.sm }}>
-                  照片只进入本机/浏览器会话中的拟合模块，不自动上传服务器。Android APK 使用随包内置的 ML Kit 人脸与 33 点姿态模型，
-                  Web 使用 MediaPipe；全身照拟合体格，半身照只更新肩宽。Avatar 档案和时间线不保存图片路径或原始像素；
-                  原生端若图片选择器生成应用缓存工作副本，分析结束后会尝试删除该副本。
-                </Text>
+                <View style={{ marginTop: theme.spacing.sm }}>
+                  <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, lineHeight: 18 }}>
+                    仅在本机/浏览器会话中分析，不自动上传服务器。
+                  </Text>
+                  <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, lineHeight: 18, marginTop: 2 }}>
+                    正式 Avatar 版本只保存确认后的参数与不可逆来源凭据，不保存图片路径或原始像素。
+                  </Text>
+                  <Pressable
+                    onPress={() => setPhotoPrivacyDetailsExpanded((value) => !value)}
+                    accessibilityRole="button"
+                    accessibilityLabel={photoPrivacyDetailsExpanded ? '收起照片拟合技术与缓存说明' : '展开照片拟合技术与缓存说明'}
+                    accessibilityState={{ expanded: photoPrivacyDetailsExpanded }}
+                    style={({ pressed }) => ({
+                      minHeight: theme.touch.minTarget,
+                      alignSelf: 'flex-start',
+                      justifyContent: 'center',
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <Text style={{ color: D.teal, fontSize: theme.font.tiny, fontWeight: '700' }}>
+                      技术与缓存说明 {photoPrivacyDetailsExpanded ? '⌃' : '⌄'}
+                    </Text>
+                  </Pressable>
+                  {photoPrivacyDetailsExpanded && (
+                    <Text style={{ color: D.textTertiary, fontSize: theme.font.tiny, lineHeight: 18 }}>
+                      Android APK 使用随包内置的 ML Kit 人脸与 33 点姿态模型，Web 使用 MediaPipe；全身照拟合体格，半身照只更新肩宽。
+                      原生端若图片选择器生成应用缓存工作副本，分析结束后会尝试删除该副本。
+                    </Text>
+                  )}
+                </View>
                 {photoHint && (
                   <Text style={{ color: D.accent, fontSize: theme.font.tiny, lineHeight: 18, marginTop: theme.spacing.xs }}>
                     {photoHint}
