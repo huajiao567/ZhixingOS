@@ -670,7 +670,7 @@ export function Mirror3DEditor() {
                   </Pressable>
                   {photoPrivacyDetailsExpanded && (
                     <Text style={{ color: D.textTertiary, fontSize: theme.font.tiny, lineHeight: 18 }}>
-                      Android APK 使用随包内置的 ML Kit 人脸与 33 点姿态模型；Web 使用 MediaPipe，并会从外部 CDN/Google 下载运行代码与模型。
+                      Android APK 使用随包内置的 ML Kit 人脸与 33 点姿态模型；Web 将固定版本的 MediaPipe JS 随应用打包，运行时仍会从外部 CDN/Google 下载 WASM 与模型。
                       MediaPipe 官方说明不会发送输入图像数据，但其 Tasks API 可能发送性能与使用指标。全身照拟合体格，半身照只更新肩宽。
                       原生端若图片选择器生成应用缓存工作副本，分析结束后会尝试删除该副本。
                     </Text>
