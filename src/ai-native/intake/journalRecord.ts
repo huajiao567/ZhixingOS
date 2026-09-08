@@ -4,6 +4,8 @@ export type JournalSourceRef = 'text-diary' | 'photo-note' | 'voice-note' | 'ava
 
 export interface JournalInputOptions {
   sourceRef?: JournalSourceRef;
+  /** Exact persisted source-permission row when the record came from captured media. */
+  consentId?: string;
   domain?: Domain;
   sensitivity?: Sensitivity;
   titlePrefix?: string;
@@ -33,7 +35,7 @@ export function inferJournalDomain(text: string): Domain {
 
 export function journalSourceLabel(sourceRef: string): '文字' | '照片' | '语音' | '孪生' | '记录' {
   if (sourceRef.startsWith('photo')) return '照片';
-  if (sourceRef.startsWith('voice')) return '语音';
+  if (sourceRef.startsWith('voice') || sourceRef.startsWith('audio')) return '语音';
   if (sourceRef.startsWith('avatar')) return '孪生';
   if (sourceRef.startsWith('text')) return '文字';
   return '记录';
