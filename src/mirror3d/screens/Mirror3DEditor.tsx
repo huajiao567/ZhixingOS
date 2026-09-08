@@ -237,7 +237,7 @@ export function Mirror3DEditor() {
     const photoSourceRef = photoDraftProvenance?.sourceRef;
     const sourceMode = photoSourceRef ? 'photo_assisted' : 'manual';
     const versionNote = photoSourceRef
-      ? `来自三维镜像编辑器；照片只在本地生成预览草稿。正式版本仅保留不可逆来源凭据 ${photoSourceRef} 与用户确认后的参数，不保存图片路径或原始像素。`
+      ? `来自三维镜像编辑器；照片只在本地生成预览草稿。正式版本仅保留不含原始路径的不透明来源凭据 ${photoSourceRef} 与用户确认后的参数，不保存图片路径或原始像素。`
       : '来自三维镜像编辑器的手动调整；保存动作由用户明确触发，未关联照片来源。';
 
     confirmPersonalization(
@@ -254,7 +254,7 @@ export function Mirror3DEditor() {
       '已应用：脸宽/脸长、身体框架、肩骨宽度、肤色、发色与服装色。',
       '已保存待后续模型支持：下颌、眼睛、眼距、眉形、鼻子、嘴部等精细参数。',
       photoSourceRef
-        ? `来源：照片辅助草稿 + 用户明确确认；只保留不可逆凭据 ${photoSourceRef}，不保存原始像素。`
+        ? `来源：照片辅助草稿 + 用户明确确认；只保留不透明来源凭据 ${photoSourceRef}，不保存原始路径或像素。`
         : '来源：用户在三维镜像编辑器中手动调整并明确确认。',
     ].join('\n'), {
       sourceRef: photoSourceRef ? `avatar-editor:${photoSourceRef}` : 'avatar-editor',
@@ -267,7 +267,7 @@ export function Mirror3DEditor() {
     );
     setPhotoDraftProvenance(null);
     setPhotoHint(photoSourceRef
-      ? '已确认并保存。正式版本只保留不可逆照片来源凭据，不保存原始像素。'
+      ? '已确认并保存。正式版本只保留不透明照片来源凭据，不保存原始路径或像素。'
       : '已保存到正式数字孪生，并写入新的身份版本。');
   };
 
@@ -320,7 +320,7 @@ export function Mirror3DEditor() {
       setPhotoHint(`已根据照片调整${parts.join('与')}，你可以继续微调；只有标记为“预览生效”的参数会改变当前生产数字人。`);
 
       // 照片结果先只形成本地草稿；只有用户点击“保存到我的数字孪生”才进入正式身份版本。
-      // 审计只持有不可逆 sourceRef，不保存 file/content/blob URI。
+      // 审计只持有不透明 sourceRef，不保存 file/content/blob URI。
       useStore.getState().pushAudit(
         '用户',
         `本地照片生成三维形象草稿：${parts.join('、') || '无'}`,
@@ -650,7 +650,7 @@ export function Mirror3DEditor() {
                     仅在本机/浏览器会话中分析，不自动上传服务器。
                   </Text>
                   <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, lineHeight: 18, marginTop: 2 }}>
-                    正式 Avatar 版本只保存确认后的参数与不可逆来源凭据，不保存图片路径或原始像素。
+                    正式 Avatar 版本只保存确认后的参数与不透明来源凭据，不保存图片路径或原始像素。
                   </Text>
                   <Pressable
                     onPress={() => setPhotoPrivacyDetailsExpanded((value) => !value)}
@@ -699,7 +699,7 @@ export function Mirror3DEditor() {
                       {photoDraftProvenance.width}×{photoDraftProvenance.height} · 来源凭据 {photoDraftProvenance.sourceRef}
                     </Text>
                     <Text style={{ color: D.textTertiary, fontSize: theme.font.tiny, lineHeight: 16, marginTop: 2 }}>
-                      正式版本只会保存确认后的参数与该不可逆凭据；不会保存原始照片像素。
+                      正式版本只会保存确认后的参数与该不透明来源凭据；不会保存原始照片路径或像素。
                     </Text>
                   </View>
                 )}
