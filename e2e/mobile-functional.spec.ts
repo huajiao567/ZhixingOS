@@ -330,6 +330,13 @@ test.describe('390x844 手机界面功能冒烟', () => {
       ).toBeTruthy();
 
       expect(
+        mediaPipeExternalRequests
+          .filter((request) => request.url.includes('cdn.jsdelivr.net/npm/@mediapipe/tasks-vision'))
+          .every((request) => /\/wasm\//.test(request.url)),
+        'MediaPipe JS must stay in the app build; only the pinned WASM runtime may come from jsDelivr',
+      ).toBeTruthy();
+
+      expect(
         mediaPipeExternalRequests.some((request) => /\/wasm\//.test(request.url)),
         'real MediaPipe Web fitting should request its pinned WASM runtime',
       ).toBeTruthy();
