@@ -7,6 +7,7 @@ import {
   Pressable,
   SafeAreaView,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
