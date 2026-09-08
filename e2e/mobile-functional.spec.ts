@@ -1,9 +1,54 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
 const WEB_BASE = process.env.WEB_BASE ?? 'http://localhost:8081';
 const SHOTS = resolve('e2e', 'mobile-screenshots');
+
+const MEDIAPIPE_PORTRAIT_FIXTURE = {
+  url: 'https://storage.googleapis.com/mediapipe-assets/tasks/testdata/vision/portrait.jpg?generation=1782185108020964',
+  sha256: 'a6f11efaa834706db23f275b6115058fa87fc7f14362681e6abe14e82749de3e',
+  fileName: 'mediapipe-portrait.jpg',
+} as const;
+
+async function materializeMediaPipePortraitFixture(): Promise<string> {
+  const filePath = resolve(tmpdir(), `zhixingos-${MEDIAPIPE_PORTRAIT_FIXTURE.fileName}`);
+
+  const verify = (bytes: Buffer) => {
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    if (digest !== MEDIAPIPE_PORTRAIT_FIXTURE.sha256) {
+      throw new Error(`MediaPipe portrait fixture SHA-256 mismatch: ${digest}`);
+    }
+  };
+
+  if (existsSync(filePath)) {
+    const existing = readFileSync(filePath);
+    verify(existing);
+    return filePath;
+  }
+
+  const response = await fetch(MEDIAPIPE_PORTRAIT_FIXTURE.url);
+  if (!response.ok) {
+    throw new Error(`MediaPipe portrait fixture download failed: HTTP ${response.status}`);
+  }
+
+  const bytes = Buffer.from(await response.arrayBuffer());
+  verify(bytes);
+  writeFileSync(filePath, bytes);
+  return filePath;
+}
+
+function clearMediaPipePortraitFixture(filePath: string | null) {
+  if (!filePath) return;
+  try {
+    rmSync(filePath, { force: true });
+  } catch {
+    // Public CI fixture cleanup is best-effort; never fail the product test
+    // after all assertions have already completed.
+  }
+}
 
 type AvatarRuntimeProbe = {
   instanceId: string;
@@ -93,8 +138,17 @@ async function loginDemo(page: Page) {
 test.describe('390x844 手机界面功能冒烟', () => {
   test.beforeEach(async ({ page }) => {
     test.skip(test.info().project.name !== 'mobile-chromium', '仅在手机视口项目执行');
-    await page.context().setExtraHTTPHeaders({
-      'X-Forwarded-For': `10.88.0.${test.info().workerIndex * 20 + test.info().retry * 5 + test.info().title.length % 19 + 1}`,
+
+    // 只对本机隔离后端注入测试 IP，避免把 X-Forwarded-For 泄露给
+    // MediaPipe CDN / Google 模型请求并触发 CORS 预检失败。
+    const forwardedFor = `10.88.0.${test.info().workerIndex * 20 + test.info().retry * 5 + test.info().title.length % 19 + 1}`;
+    await page.context().route('http://127.0.0.1:3001/**', async (route) => {
+      await route.continue({
+        headers: {
+          ...route.request().headers(),
+          'x-forwarded-for': forwardedFor,
+        },
+      });
     });
     page.setDefaultTimeout(20_000);
   });
@@ -137,35 +191,190 @@ test.describe('390x844 手机界面功能冒烟', () => {
     await expect(page.getByRole('button', { name: '现在的我' })).toBeVisible();
   });
 
-  test('照片拟合隐私边界与技术说明在 390x844 下可访问', async ({ page }) => {
+  test('真实照片文件经 Web picker + MediaPipe 生成草稿并明确确认进入 Timeline', async ({ page }) => {
     test.setTimeout(240_000);
-    await loginDemo(page);
-    await page.getByRole('button', { name: '现在的我' }).click();
-    await expect(page.getByText('镜像', { exact: true }).first()).toBeVisible();
+    let fixturePath: string | null = null;
+    const backendRequestBodies: string[] = [];
+    const mediaPipeExternalRequests: { url: string; forwardedFor?: string }[] = [];
+    page.on('request', (request) => {
+      const url = request.url();
+      if (url.startsWith('http://127.0.0.1:3001/')) {
+        const body = request.postData();
+        if (body) backendRequestBodies.push(body);
+        return;
+      }
+      if (
+        url.includes('cdn.jsdelivr.net/npm/@mediapipe/tasks-vision')
+        || url.includes('storage.googleapis.com/mediapipe-models/')
+      ) {
+        mediaPipeExternalRequests.push({
+          url,
+          forwardedFor: request.headers()['x-forwarded-for'],
+        });
+      }
+    });
 
-    await page.getByRole('button', { name: '调整形象与状态，打开三维镜像编辑器' }).click();
-    await expect(page.getByText('我的三维镜像', { exact: true })).toBeVisible({ timeout: 30_000 });
-    await page.getByRole('tab', { name: /切换到捏脸标签/ }).click();
+    try {
+      fixturePath = await materializeMediaPipePortraitFixture();
+      await loginDemo(page);
+      await page.getByRole('button', { name: '现在的我' }).click();
+      await expect(page.getByText('镜像', { exact: true }).first()).toBeVisible();
 
-    await page.waitForFunction(() => {
-      const root = window as typeof window & {
-        __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
-      };
-      const probe = Object.values(root.__avatarRuntimeProbes ?? {})
-        .find((candidate) => candidate.evidenceTypes.includes('editor_preview'));
-      return Boolean(probe?.geometry.headWorldScale && probe?.geometry.shoulderWorldDistance);
-    }, undefined, { timeout: 120_000 });
+      await page.getByRole('button', { name: '调整形象与状态，打开三维镜像编辑器' }).click();
+      await expect(page.getByText('我的三维镜像', { exact: true })).toBeVisible({ timeout: 30_000 });
+      await page.getByRole('tab', { name: /切换到捏脸标签/ }).click();
 
-    const photoFitButton = page.getByRole('button', { name: '从照片生成脸与体格参数' });
-    await photoFitButton.scrollIntoViewIfNeeded();
-    await expect(page.getByText(/不自动上传服务器/)).toBeVisible();
-    await expect(page.getByText(/不保存图片路径或原始像素/)).toBeVisible();
-    const privacyDetails = page.getByRole('button', { name: '展开照片拟合技术与缓存说明' });
-    await expect(privacyDetails).toBeVisible();
-    await privacyDetails.click();
-    await expect(page.getByText(/Android APK 使用随包内置的 ML Kit/)).toBeVisible();
-    await page.getByRole('button', { name: '收起照片拟合技术与缓存说明' }).click();
-    await screenshot(page, '02a-photo-fit-privacy');
+      await page.waitForFunction(() => {
+        const root = window as typeof window & {
+          __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+        };
+        const probe = Object.values(root.__avatarRuntimeProbes ?? {})
+          .find((candidate) => candidate.evidenceTypes.includes('editor_preview'));
+        return Boolean(probe?.geometry.headWorldScale && probe?.geometry.shoulderWorldDistance);
+      }, undefined, { timeout: 120_000 });
+
+      const baselineProbe = await readEditorAvatarRuntimeProbe(page);
+      const photoFitButton = page.getByRole('button', { name: '从照片生成脸与体格参数' });
+      await photoFitButton.scrollIntoViewIfNeeded();
+      await expect(page.getByText(/照片像素仅在本机\/浏览器会话中分析，不作为输入数据上传/)).toBeVisible();
+      await expect(page.getByText(/不保存图片路径或原始像素/)).toBeVisible();
+
+      const privacyDetails = page.getByRole('button', { name: '展开照片拟合技术与缓存说明' });
+      await expect(privacyDetails).toBeVisible();
+      await privacyDetails.click();
+      await expect(page.getByText(/Android APK 使用随包内置的 ML Kit/)).toBeVisible();
+      await expect(page.getByText(/MediaPipe 官方说明不会发送输入图像数据/)).toBeVisible();
+      await expect(page.getByText(/Tasks API 会向 Google 发送性能与使用指标/)).toBeVisible();
+      await page.getByRole('button', { name: '收起照片拟合技术与缓存说明' }).click();
+      await screenshot(page, '02a-photo-fit-privacy');
+
+      let fileChooserEvents = 0;
+      page.on('filechooser', () => {
+        fileChooserEvents += 1;
+      });
+
+      // 第一次点击只能展示知情同意，不能偷偷打开相册或开始检测。
+      await photoFitButton.click();
+      const consentCard = page.getByLabel('MediaPipe 指标处理知情同意');
+      await expect(consentCard).toBeVisible();
+      await expect(page.getByText(/照片输入只在设备端用于 MediaPipe 检测，不发送给 Google/)).toBeVisible();
+      await expect(page.getByText(/MediaPipe Tasks 会向 Google 发送 API 性能与使用指标/)).toBeVisible();
+      expect(fileChooserEvents).toBe(0);
+      await screenshot(page, '02a-photo-fit-consent');
+
+      // 明确拒绝后仍不触发文件选择器；重新发起后，只有“同意并继续”
+      // 才允许进入真实 Web file chooser。
+      await page.getByRole('button', { name: '暂不使用照片拟合' }).click();
+      await expect(consentCard).toHaveCount(0);
+      expect(fileChooserEvents).toBe(0);
+
+      await photoFitButton.click();
+      await expect(consentCard).toBeVisible();
+      const chooserPromise = page.waitForEvent('filechooser');
+      await page.getByRole('button', { name: '同意 MediaPipe 指标处理并选择照片' }).click();
+      const chooser = await chooserPromise;
+      await chooser.setFiles(fixturePath);
+
+      await expect(page.getByText(/已根据照片调整脸型/)).toBeVisible({ timeout: 120_000 });
+      const draftCard = page.getByLabel(/照片拟合草稿，仅本地分析，待确认，来源凭据 photo:local:/);
+      await expect(draftCard).toBeVisible();
+
+      const draftLabel = await draftCard.getAttribute('aria-label');
+      const receipt = draftLabel?.match(/(photo:local:[a-z0-9_-]+)/i)?.[1];
+      expect(receipt, 'photo fitting should expose an opaque local receipt').toBeTruthy();
+
+      await page.waitForFunction(({ faceWidth, faceHeight }) => {
+        const root = window as typeof window & {
+          __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+        };
+        const probe = Object.values(root.__avatarRuntimeProbes ?? {})
+          .find((candidate) => candidate.evidenceTypes.includes('editor_preview'));
+        return Boolean(
+          probe
+          && (
+            Math.abs(probe.identity.faceWidth - faceWidth) > 0.01
+            || Math.abs(probe.identity.faceHeight - faceHeight) > 0.01
+          ),
+        );
+      }, {
+        faceWidth: baselineProbe.identity.faceWidth,
+        faceHeight: baselineProbe.identity.faceHeight,
+      }, { timeout: 30_000 });
+
+      const fittedProbe = await readEditorAvatarRuntimeProbe(page);
+      const identityDelta = Math.max(
+        Math.abs(fittedProbe.identity.faceWidth - baselineProbe.identity.faceWidth),
+        Math.abs(fittedProbe.identity.faceHeight - baselineProbe.identity.faceHeight),
+      );
+      const headGeometryDelta = Math.max(
+        Math.abs(fittedProbe.geometry.headWorldScale!.x - baselineProbe.geometry.headWorldScale!.x),
+        Math.abs(fittedProbe.geometry.headWorldScale!.y - baselineProbe.geometry.headWorldScale!.y),
+      );
+      expect(identityDelta).toBeGreaterThan(0.01);
+      expect(headGeometryDelta).toBeGreaterThan(0.002);
+
+      for (const body of backendRequestBodies) {
+        expect(body).not.toContain(MEDIAPIPE_PORTRAIT_FIXTURE.fileName);
+        expect(body).not.toContain('blob:');
+        expect(body).not.toContain('data:image');
+        expect(body).not.toContain('file://');
+      }
+      expect(
+        backendRequestBodies.some((body) =>
+          body.includes('mediapipe_tasks_web')
+          && body.includes('"informed_consent":true')
+          && body.includes('"input_data_upload":false')
+          && body.includes('"metrics_provider":"google"')
+        ),
+        'MediaPipe metrics consent should be registered before fitting',
+      ).toBeTruthy();
+
+      expect(
+        mediaPipeExternalRequests
+          .filter((request) => request.url.includes('cdn.jsdelivr.net/npm/@mediapipe/tasks-vision'))
+          .every((request) => /\/wasm\//.test(request.url)),
+        'MediaPipe JS must stay in the app build; only the pinned WASM runtime may come from jsDelivr',
+      ).toBeTruthy();
+
+      expect(
+        mediaPipeExternalRequests.some((request) => /\/wasm\//.test(request.url)),
+        'real MediaPipe Web fitting should request its pinned WASM runtime',
+      ).toBeTruthy();
+      expect(
+        mediaPipeExternalRequests.some((request) => request.url.includes('/face_landmarker/')),
+        'real MediaPipe Web fitting should request the face-landmarker model',
+      ).toBeTruthy();
+      for (const request of mediaPipeExternalRequests) {
+        expect(request.forwardedFor, `synthetic backend IP leaked to external request: ${request.url}`).toBeUndefined();
+      }
+
+      console.log('[photo-file-runtime-proof]', JSON.stringify({
+        fixtureSha256: MEDIAPIPE_PORTRAIT_FIXTURE.sha256,
+        baselineFaceWidth: baselineProbe.identity.faceWidth,
+        fittedFaceWidth: fittedProbe.identity.faceWidth,
+        baselineFaceHeight: baselineProbe.identity.faceHeight,
+        fittedFaceHeight: fittedProbe.identity.faceHeight,
+        baselineHeadScale: baselineProbe.geometry.headWorldScale,
+        fittedHeadScale: fittedProbe.geometry.headWorldScale,
+        receipt,
+      }));
+      await screenshot(page, '02a-photo-fit-applied');
+
+      await page.getByRole('button', { name: '保存到我的数字孪生' }).click();
+      await expect(page.getByText(/已确认并保存/)).toBeVisible({ timeout: 20_000 });
+      await screenshot(page, '02a-photo-fit-confirmed');
+      await page.getByRole('button', { name: '关闭' }).click();
+
+      await page.getByRole('button', { name: '查看时间中的自己' }).click();
+      await expect(page.getByText('确认我的三维形象', { exact: true })).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText(/来源：照片辅助 \+ 用户明确确认/)).toBeVisible();
+      await expect(page.getByText(new RegExp(`凭据 ${receipt}`)).first()).toBeVisible();
+      await expect(page.getByText(/不保存图片路径或原始像素/)).toBeVisible();
+      await screenshot(page, '02a-photo-fit-timeline');
+      await page.getByRole('button', { name: '关闭时间中的自己' }).click();
+    } finally {
+      clearMediaPipePortraitFixture(fixturePath);
+    }
   });
 
   test('正式 VRM 个性化参数真实改变渲染并经确认进入 Timeline', async ({ page }) => {

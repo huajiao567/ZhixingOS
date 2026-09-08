@@ -132,6 +132,12 @@ export function Mirror3DPanel({
                   {entry.sourceModelVersion ? (
                     <Text style={{ color: theme.colors.textTertiary, marginTop: 3 }}>个人模型：{entry.sourceModelVersion}</Text>
                   ) : null}
+                  {entry.personalizationSource ? (
+                    <Text style={{ color: theme.colors.textTertiary, marginTop: 3 }}>
+                      来源：{entry.personalizationSource === 'photo_assisted' ? '照片辅助 + 用户明确确认' : '手动调整 + 用户明确确认'}
+                      {entry.sourceRefs?.[0] ? ` · 凭据 ${entry.sourceRefs[0]}` : ''}
+                    </Text>
+                  ) : null}
                   {entry.note ? <Text style={{ color: theme.colors.textSecondary, lineHeight: 20, marginTop: 6 }}>{entry.note}</Text> : null}
                 </View>
               ))}
