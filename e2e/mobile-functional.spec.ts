@@ -222,11 +222,34 @@ test.describe('390x844 手机界面功能冒烟', () => {
       await privacyDetails.click();
       await expect(page.getByText(/Android APK 使用随包内置的 ML Kit/)).toBeVisible();
       await expect(page.getByText(/MediaPipe 官方说明不会发送输入图像数据/)).toBeVisible();
+      await expect(page.getByText(/Tasks API 会向 Google 发送性能与使用指标/)).toBeVisible();
       await page.getByRole('button', { name: '收起照片拟合技术与缓存说明' }).click();
       await screenshot(page, '02a-photo-fit-privacy');
 
-      const chooserPromise = page.waitForEvent('filechooser');
+      let fileChooserEvents = 0;
+      page.on('filechooser', () => {
+        fileChooserEvents += 1;
+      });
+
+      // 第一次点击只能展示知情同意，不能偷偷打开相册或开始检测。
       await photoFitButton.click();
+      const consentCard = page.getByLabel('MediaPipe 指标处理知情同意');
+      await expect(consentCard).toBeVisible();
+      await expect(page.getByText(/照片输入只在设备端用于 MediaPipe 检测，不发送给 Google/)).toBeVisible();
+      await expect(page.getByText(/MediaPipe Tasks 会向 Google 发送 API 性能与使用指标/)).toBeVisible();
+      expect(fileChooserEvents).toBe(0);
+      await screenshot(page, '02a-photo-fit-consent');
+
+      // 明确拒绝后仍不触发文件选择器；重新发起后，只有“同意并继续”
+      // 才允许进入真实 Web file chooser。
+      await page.getByRole('button', { name: '暂不使用照片拟合' }).click();
+      await expect(consentCard).toHaveCount(0);
+      expect(fileChooserEvents).toBe(0);
+
+      await photoFitButton.click();
+      await expect(consentCard).toBeVisible();
+      const chooserPromise = page.waitForEvent('filechooser');
+      await page.getByRole('button', { name: '同意 MediaPipe 指标处理并选择照片' }).click();
       const chooser = await chooserPromise;
       await chooser.setFiles(fixturePath);
 
@@ -274,6 +297,15 @@ test.describe('390x844 手机界面功能冒烟', () => {
         expect(body).not.toContain('data:image');
         expect(body).not.toContain('file://');
       }
+      expect(
+        backendRequestBodies.some((body) =>
+          body.includes('mediapipe_tasks_web')
+          && body.includes('"informed_consent":true')
+          && body.includes('"input_data_upload":false')
+          && body.includes('"metrics_provider":"google"')
+        ),
+        'MediaPipe metrics consent should be registered before fitting',
+      ).toBeTruthy();
 
       console.log('[photo-file-runtime-proof]', JSON.stringify({
         fixtureSha256: MEDIAPIPE_PORTRAIT_FIXTURE.sha256,
