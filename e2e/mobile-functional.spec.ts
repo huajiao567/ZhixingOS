@@ -68,6 +68,21 @@ type AvatarRuntimeProbe = {
     shoulderRootNames: string[];
   };
   appearance: { skin?: string; hair?: string; outfit?: string };
+  motion: {
+    elapsed: number;
+    blinkActive: boolean;
+    blinkPhase: 'closing' | 'closed' | 'opening';
+    blinkAmount: number;
+    blinkCycleCount: number;
+    breathPhase: number;
+    breathAmount: number;
+    gazeTarget: { x: number; y: number; z: number };
+    acknowledgeActive: boolean;
+    acknowledgeProgress: number;
+    acknowledgeTrigger: number;
+    acknowledgeNod: number;
+    acknowledgeSpineRelax: number;
+  };
 };
 
 async function readEditorAvatarRuntimeProbe(page: Page): Promise<AvatarRuntimeProbe> {
@@ -78,6 +93,19 @@ async function readEditorAvatarRuntimeProbe(page: Page): Promise<AvatarRuntimePr
     const probe = Object.values(root.__avatarRuntimeProbes ?? {})
       .find((candidate) => candidate.evidenceTypes.includes('editor_preview'));
     if (!probe) throw new Error('editor avatar runtime probe is not ready');
+    return probe;
+  });
+}
+
+async function readLatestAvatarRuntimeProbe(page: Page): Promise<AvatarRuntimeProbe> {
+  return page.evaluate(() => {
+    const root = window as typeof window & {
+      __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+    };
+    const probe = Object.values(root.__avatarRuntimeProbes ?? {})
+      .filter((candidate) => Boolean(candidate.geometry.headWorldScale))
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (!probe) throw new Error('avatar runtime probe is not ready');
     return probe;
   });
 }
@@ -164,13 +192,79 @@ test.describe('390x844 手机界面功能冒烟', () => {
         .some((probe) => Boolean(probe.geometry.headWorldScale));
     }, undefined, { timeout: 120_000 });
     await expect(page.getByRole('progressbar')).toHaveCount(0, { timeout: 5_000 });
+
+    const baselineMotionProbe = await readLatestAvatarRuntimeProbe(page);
+    expect(baselineMotionProbe.motion, 'production renderer must expose motion evidence').toBeTruthy();
+
+    // 真实 production VRM 必须在没有用户输入时持续产生自然呼吸/眨眼，
+    // 而不是仅渲染一个静态模型或只在 UI store 中改状态。
+    await page.waitForFunction(({ instanceId, blinkCycleCount, breathPhase }) => {
+      const root = window as typeof window & {
+        __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+      };
+      const probe = root.__avatarRuntimeProbes?.[instanceId];
+      return Boolean(
+        probe
+        && probe.motion.blinkCycleCount > blinkCycleCount
+        && probe.motion.blinkAmount > 0.12
+        && Math.abs(probe.motion.breathPhase - breathPhase) > 0.12,
+      );
+    }, {
+      instanceId: baselineMotionProbe.instanceId,
+      blinkCycleCount: baselineMotionProbe.motion.blinkCycleCount,
+      breathPhase: baselineMotionProbe.motion.breathPhase,
+    }, { timeout: 12_000 });
+
+    const avatarButton = page.getByRole('button', { name: '现在的我' });
+    const avatarBox = await avatarButton.boundingBox();
+    if (!avatarBox) throw new Error('home avatar has no rendered bounding box');
+    const gazeBefore = (await readLatestAvatarRuntimeProbe(page)).motion.gazeTarget.x;
+    await page.mouse.move(
+      avatarBox.x + avatarBox.width * 0.82,
+      avatarBox.y + avatarBox.height * 0.38,
+    );
+    await page.waitForFunction(({ instanceId, gazeBefore }) => {
+      const root = window as typeof window & {
+        __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+      };
+      const probe = root.__avatarRuntimeProbes?.[instanceId];
+      return Boolean(probe && Math.abs(probe.motion.gazeTarget.x - gazeBefore) > 0.035);
+    }, {
+      instanceId: baselineMotionProbe.instanceId,
+      gazeBefore,
+    }, { timeout: 5_000 });
+
     await screenshot(page, '01-mirror-home');
 
     const recordInput = page.getByPlaceholder('说点什么…');
     await expect(recordInput).toBeVisible();
     await recordInput.fill('昨晚熬夜，只睡了 4.5 小时，今天压力很大');
+    const ackBefore = await readLatestAvatarRuntimeProbe(page);
     await page.getByRole('button', { name: '发送' }).click();
     await expect(page.getByText(/已收进今天/)).toBeVisible({ timeout: 10_000 });
+
+    // 记录完成后的“收到”反馈必须穿过 AvatarCanvasFlagged -> VRMAvatarView，
+    // 并在真实骨骼运动中出现，而不是只有 toast/文案反馈。
+    await page.waitForFunction(({ instanceId, acknowledgeTrigger }) => {
+      const root = window as typeof window & {
+        __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe>;
+      };
+      const probe = root.__avatarRuntimeProbes?.[instanceId];
+      return Boolean(
+        probe
+        && probe.motion.acknowledgeTrigger > acknowledgeTrigger
+        && probe.motion.acknowledgeActive
+        && (
+          Math.abs(probe.motion.acknowledgeNod) > 0.006
+          || Math.abs(probe.motion.acknowledgeSpineRelax) > 0.004
+        ),
+      );
+    }, {
+      instanceId: ackBefore.instanceId,
+      acknowledgeTrigger: ackBefore.motion.acknowledgeTrigger,
+    }, { timeout: 5_000 });
+    await screenshot(page, '01a-record-avatar-ack');
+
     await page.getByRole('button', { name: '展开今天的记录' }).click();
     await expect(
       page.getByLabel(/今天记录，文字，\d{2}:\d{2}，昨晚熬夜，只睡了 4\.5 小时，今天压力很大/),
