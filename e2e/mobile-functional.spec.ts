@@ -138,8 +138,17 @@ async function loginDemo(page: Page) {
 test.describe('390x844 手机界面功能冒烟', () => {
   test.beforeEach(async ({ page }) => {
     test.skip(test.info().project.name !== 'mobile-chromium', '仅在手机视口项目执行');
-    await page.context().setExtraHTTPHeaders({
-      'X-Forwarded-For': `10.88.0.${test.info().workerIndex * 20 + test.info().retry * 5 + test.info().title.length % 19 + 1}`,
+
+    // 只对本机隔离后端注入测试 IP，避免把 X-Forwarded-For 泄露给
+    // MediaPipe CDN / Google 模型请求并触发 CORS 预检失败。
+    const forwardedFor = `10.88.0.${test.info().workerIndex * 20 + test.info().retry * 5 + test.info().title.length % 19 + 1}`;
+    await page.context().route('http://127.0.0.1:3001/**', async (route) => {
+      await route.continue({
+        headers: {
+          ...route.request().headers(),
+          'x-forwarded-for': forwardedFor,
+        },
+      });
     });
     page.setDefaultTimeout(20_000);
   });
