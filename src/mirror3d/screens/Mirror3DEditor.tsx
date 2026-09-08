@@ -644,7 +644,7 @@ export function Mirror3DEditor() {
             <>
               <Section title="从照片生成（脸 + 体格）">
                 <Pressable
-                  onPress={handlePhotoFitting}
+                  onPress={() => { void handlePhotoFitting(false); }}
                   disabled={photoBusy}
                   accessibilityLabel="从照片生成脸与体格参数"
                   accessibilityRole="button"
