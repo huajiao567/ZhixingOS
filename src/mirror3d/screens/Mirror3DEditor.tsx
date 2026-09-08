@@ -647,7 +647,7 @@ export function Mirror3DEditor() {
                 </Pressable>
                 <View style={{ marginTop: theme.spacing.sm }}>
                   <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, lineHeight: 18 }}>
-                    仅在本机/浏览器会话中分析，不自动上传服务器。
+                    照片像素仅在本机/浏览器会话中分析，不作为输入数据上传。
                   </Text>
                   <Text style={{ color: D.textSecondary, fontSize: theme.font.tiny, lineHeight: 18, marginTop: 2 }}>
                     正式 Avatar 版本只保存确认后的参数与不透明来源凭据，不保存图片路径或原始像素。
@@ -670,7 +670,8 @@ export function Mirror3DEditor() {
                   </Pressable>
                   {photoPrivacyDetailsExpanded && (
                     <Text style={{ color: D.textTertiary, fontSize: theme.font.tiny, lineHeight: 18 }}>
-                      Android APK 使用随包内置的 ML Kit 人脸与 33 点姿态模型，Web 使用 MediaPipe；全身照拟合体格，半身照只更新肩宽。
+                      Android APK 使用随包内置的 ML Kit 人脸与 33 点姿态模型；Web 使用 MediaPipe，并会从外部 CDN/Google 下载运行代码与模型。
+                      MediaPipe 官方说明不会发送输入图像数据，但其 Tasks API 可能发送性能与使用指标。全身照拟合体格，半身照只更新肩宽。
                       原生端若图片选择器生成应用缓存工作副本，分析结束后会尝试删除该副本。
                     </Text>
                   )}
