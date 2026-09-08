@@ -10,6 +10,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Slider from '@react-native-community/slider';
@@ -106,6 +107,8 @@ export function Mirror3DEditor() {
   const theme = useAppTheme();
   const D = theme.colors;
   const navigation = useNavigation<any>();
+  const { width: screenWidth } = useWindowDimensions();
+  const isCompactEditor = screenWidth < 600;
 
   const [tab, setTab] = useState<Tab>('mirror');
   const [themeSelectorVisible, setThemeSelectorVisible] = useState(false);
@@ -402,7 +405,11 @@ export function Mirror3DEditor() {
     <SafeAreaView style={{ flex: 1, backgroundColor: D.bg }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <StatusBar />
-        <ScrollView contentContainerStyle={{ paddingHorizontal: theme.spacing.lg, paddingBottom: 34 }} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: theme.spacing.lg, paddingBottom: 34 }}
+          keyboardShouldPersistTaps="handled"
+          stickyHeaderIndices={isCompactEditor && tab === 'identity' ? [1] : undefined}
+        >
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: theme.spacing.xs, paddingBottom: theme.spacing.md }}>
             <Pressable
               onPress={() => navigation.goBack()}
@@ -426,7 +433,24 @@ export function Mirror3DEditor() {
             </View>
           </View>
 
-          <View style={{ height: 340, borderRadius: theme.radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: D.border, backgroundColor: D.surface }}>
+          <View
+            style={{
+              backgroundColor: D.bg,
+              paddingBottom: isCompactEditor && tab === 'identity' ? theme.spacing.xs : 0,
+              zIndex: isCompactEditor && tab === 'identity' ? 20 : 0,
+            }}
+          >
+          <View
+            accessibilityLabel={tab === 'identity' ? '捏脸实时三维预览' : undefined}
+            style={{
+              height: isCompactEditor && tab === 'identity' ? 240 : 340,
+              borderRadius: theme.radius.lg,
+              overflow: 'hidden',
+              borderWidth: 1,
+              borderColor: D.border,
+              backgroundColor: D.surface,
+            }}
+          >
             <AvatarCanvasFlagged profile={previewProfile} paused={false} fill />
             <View style={{ position: 'absolute', top: theme.spacing.sm, left: theme.spacing.sm, backgroundColor: theme.dark ? 'rgba(10,14,22,0.78)' : 'rgba(255,255,255,0.85)', borderRadius: theme.radius.md, paddingHorizontal: 11, paddingVertical: 8 }}>
               <Text style={{ color: D.textPrimary, fontWeight: '700', fontSize: theme.font.small }}>{snapshot.render.animation === 'idle' ? '平静' : snapshot.render.animation === 'active' ? '活跃' : snapshot.render.animation === 'focused' ? '专注' : '疲惫'}</Text>
@@ -465,6 +489,7 @@ export function Mirror3DEditor() {
                 <Text style={{ color: tab === t.v ? '#fff' : D.textSecondary, fontSize: theme.font.small, fontWeight: '600' }}>{t.l}</Text>
               </Pressable>
             ))}
+          </View>
           </View>
 
           {tab === 'mirror' && (
