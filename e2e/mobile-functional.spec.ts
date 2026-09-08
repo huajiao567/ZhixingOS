@@ -214,13 +214,14 @@ test.describe('390x844 手机界面功能冒烟', () => {
       const baselineProbe = await readEditorAvatarRuntimeProbe(page);
       const photoFitButton = page.getByRole('button', { name: '从照片生成脸与体格参数' });
       await photoFitButton.scrollIntoViewIfNeeded();
-      await expect(page.getByText(/不自动上传服务器/)).toBeVisible();
+      await expect(page.getByText(/照片像素仅在本机\/浏览器会话中分析，不作为输入数据上传/)).toBeVisible();
       await expect(page.getByText(/不保存图片路径或原始像素/)).toBeVisible();
 
       const privacyDetails = page.getByRole('button', { name: '展开照片拟合技术与缓存说明' });
       await expect(privacyDetails).toBeVisible();
       await privacyDetails.click();
       await expect(page.getByText(/Android APK 使用随包内置的 ML Kit/)).toBeVisible();
+      await expect(page.getByText(/MediaPipe 官方说明不会发送输入图像数据/)).toBeVisible();
       await page.getByRole('button', { name: '收起照片拟合技术与缓存说明' }).click();
       await screenshot(page, '02a-photo-fit-privacy');
 
