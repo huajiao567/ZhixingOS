@@ -285,6 +285,72 @@ test.describe('390x844 手机界面功能冒烟', () => {
     await expect(page.getByRole('button', { name: '现在的我' })).toBeVisible();
   });
 
+  test('主页照片记录保留真实来源凭据、授权记录并可在 5 秒内撤回', async ({ page }) => {
+    test.setTimeout(180_000);
+    let fixturePath: string | null = null;
+    try {
+      fixturePath = await materializeMediaPipePortraitFixture();
+      await loginDemo(page);
+
+      // Web 主页先询问拍摄还是相册；测试明确选择“相册”，再走真实 file chooser。
+      page.once('dialog', async (dialog) => {
+        expect(dialog.message()).toContain('拍摄新照片');
+        await dialog.dismiss();
+      });
+      const chooserPromise = page.waitForEvent('filechooser');
+      const permissionResponsePromise = page.waitForResponse((response) =>
+        response.url().endsWith('/api/data/source-permissions')
+        && response.request().method() === 'POST'
+        && (response.status() === 200 || response.status() === 201),
+      );
+      const eventRequestPromise = page.waitForRequest((request) =>
+        request.url().endsWith('/api/data/events')
+        && request.method() === 'POST'
+        && (request.postData() ?? '').includes('photo:local:'),
+      );
+
+      await page.getByRole('button', { name: '选择照片记录' }).click();
+      const chooser = await chooserPromise;
+      await chooser.setFiles(fixturePath);
+
+      const permissionResponse = await permissionResponsePromise;
+      const permission = await permissionResponse.json() as { id?: string; data_type?: string };
+      expect(permission.id, 'photo capture must receive a persisted source-permission id').toBeTruthy();
+      expect(permission.data_type).toBe('photo');
+
+      const eventRequest = await eventRequestPromise;
+      const event = eventRequest.postDataJSON() as {
+        sourceRef?: string;
+        consentId?: string;
+        sensitivity?: string;
+        startTime?: string;
+        userInterpretation?: string;
+      };
+      expect(event.sourceRef).toMatch(/^photo:local:[a-z0-9_-]+$/i);
+      expect(event.consentId).toBe(permission.id);
+      expect(event.sensitivity).toBe('sensitive');
+      expect(Date.parse(event.startTime ?? '')).not.toBeNaN();
+      expect(event.userInterpretation).not.toContain('file://');
+      expect(event.userInterpretation).not.toContain('blob:');
+      expect(event.userInterpretation).not.toContain(MEDIAPIPE_PORTRAIT_FIXTURE.fileName);
+
+      await expect(page.getByText(/照片已保存/)).toBeVisible({ timeout: 20_000 });
+      await page.getByRole('button', { name: '展开今天的记录' }).click();
+      await expect(page.getByLabel(/今天记录，照片，\d{2}:\d{2}，照片记录/)).toBeVisible();
+      await screenshot(page, '01c-photo-record-provenance');
+
+      const deleteRequestPromise = page.waitForRequest((request) =>
+        request.url().includes('/api/data/events/')
+        && request.method() === 'DELETE',
+      );
+      await page.getByRole('button', { name: '撤回' }).click();
+      await deleteRequestPromise;
+      await expect(page.getByText('已撤回 · 内容没有留下', { exact: true })).toBeVisible();
+    } finally {
+      clearMediaPipePortraitFixture(fixturePath);
+    }
+  });
+
   test('真实照片文件经 Web picker + MediaPipe 生成草稿并明确确认进入 Timeline', async ({ page }) => {
     test.setTimeout(240_000);
     let fixturePath: string | null = null;
