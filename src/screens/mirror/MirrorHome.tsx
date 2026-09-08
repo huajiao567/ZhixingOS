@@ -425,7 +425,7 @@ export function MirrorHome() {
           mimeType: photo.mimeType,
           origin: mode,
         },
-        { consentId: 'user-direct-input' },
+        { consentId: photo.consentId },
       );
       assertEnvelopeTraceable(envelope);
       await s.addJournal([
@@ -435,7 +435,10 @@ export function MirrorHome() {
         `引用凭据：${photo.sourceRef}`,
         '保存去向：今日日记 · 5 秒内可撤回',
       ].join('\n'), {
-        sourceRef: 'photo-note',
+        // Persist the opaque capture receipt itself as the event provenance;
+        // TodayRecordStrip derives the human label from the prefix.
+        sourceRef: photo.sourceRef,
+        consentId: photo.consentId,
         titlePrefix: '照片记录',
         sensitivity: 'sensitive',
       });
@@ -509,8 +512,10 @@ export function MirrorHome() {
         `引用凭据：${captured.sourceRef}`,
         `时长：${captured.durationMs}ms`,
         `类型：${captured.mimeType}`,
+        '隐私边界：事件同步不包含录音文件路径或音频字节；原始录音只存在应用本地文件。',
       ].join('\n'), {
-        sourceRef: 'voice-note',
+        sourceRef: captured.sourceRef,
+        consentId: captured.consentId,
         titlePrefix: '语音记录',
         sensitivity: 'sensitive',
       });
