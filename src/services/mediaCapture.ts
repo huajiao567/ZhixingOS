@@ -64,7 +64,7 @@ export async function pickPhoto(): Promise<CapturedPhoto | null> {
   });
   if (result.canceled || !result.assets?.[0]) return null;
   const photo = assetToCapturedPhoto(result.assets[0]);
-  await registerSourcePermission('photo', '仅保存用户主动选择照片的不可逆引用凭据和尺寸，不自动上传路径或像素', {
+  await registerSourcePermission('photo', '仅保存用户主动选择照片的不透明来源凭据和尺寸，不自动上传路径或像素', {
     access: 'selected_asset_only',
     upload: false,
   });
@@ -83,7 +83,7 @@ export async function takePhoto(): Promise<CapturedPhoto | null> {
   });
   if (result.canceled || !result.assets?.[0]) return null;
   const photo = assetToCapturedPhoto(result.assets[0]);
-  await registerSourcePermission('photo', '仅保存用户主动拍摄照片的不可逆引用凭据和尺寸，不自动上传路径或像素', {
+  await registerSourcePermission('photo', '仅保存用户主动拍摄照片的不透明来源凭据和尺寸，不自动上传路径或像素', {
     access: 'captured_asset_only',
     upload: false,
   });
@@ -130,7 +130,7 @@ export function useAudioCapture() {
     start: async (): Promise<void> => {
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       if (!permission.granted) throw new Error('麦克风权限未获授权，录音没有开始');
-      await registerSourcePermission('microphone', '仅在按下录音后采集声音；服务端只保存不可逆引用凭据', {
+      await registerSourcePermission('microphone', '仅在按下录音后采集声音；服务端只保存不含原始路径的不透明来源凭据', {
         access: 'foreground_recording',
         background: false,
         upload: false,
