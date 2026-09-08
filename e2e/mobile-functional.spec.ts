@@ -151,6 +151,12 @@ test.describe('390x844 手机界面功能冒烟', () => {
     await expect(page.getByRole('progressbar')).toHaveCount(0, { timeout: 5_000 });
     await screenshot(page, '02a-editor-top');
 
+    const photoFitButton = page.getByRole('button', { name: '从照片生成脸与体格参数' });
+    await photoFitButton.scrollIntoViewIfNeeded();
+    await expect(page.getByText(/不自动上传服务器/)).toBeVisible();
+    await expect(page.getByText(/不保存图片路径或原始像素/)).toBeVisible();
+    await screenshot(page, '02a-photo-fit-privacy');
+
     await expect(page.getByText(/当前页面直接预览正式 V2 VRM/)).toBeVisible();
     await expect(page.getByText('预览生效', { exact: true }).first()).toBeVisible();
     await expect(page.getByText(/更多精细参数 · 当前仅保存/)).toBeVisible();
