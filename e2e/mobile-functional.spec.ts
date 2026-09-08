@@ -278,6 +278,11 @@ test.describe('390x844 手机界面功能冒烟', () => {
       await expect(page.getByText(/已根据照片调整脸型/)).toBeVisible({ timeout: 120_000 });
       const draftCard = page.getByLabel(/照片拟合草稿，仅本地分析，待确认，来源凭据 photo:local:/);
       await expect(draftCard).toBeVisible();
+      await expect(page.getByText(/已映射并渲染 ≠ 身份匹配、人体测量精度或本人相似度已验证/)).toBeVisible();
+      await page.getByRole('button', { name: '展开照片拟合来源与隐私详情' }).click();
+      await expect(page.getByText(/正式版本只会保存确认后的参数与该不透明来源凭据/)).toBeVisible();
+      await page.getByRole('button', { name: '收起照片拟合来源与隐私详情' }).click();
+      await expect(page.getByText(/正式版本只会保存确认后的参数与该不透明来源凭据/)).toHaveCount(0);
 
       const draftLabel = await draftCard.getAttribute('aria-label');
       const receipt = draftLabel?.match(/(photo:local:[a-z0-9_-]+)/i)?.[1];
@@ -362,6 +367,7 @@ test.describe('390x844 手机界面功能冒烟', () => {
 
       await page.getByRole('button', { name: '保存到我的数字孪生' }).click();
       await expect(page.getByText(/已确认并保存/)).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText(/不代表系统已验证身份匹配、人体测量精度或本人相似度/)).toBeVisible();
       await screenshot(page, '02a-photo-fit-confirmed');
       await page.getByRole('button', { name: '关闭' }).click();
 
@@ -370,6 +376,7 @@ test.describe('390x844 手机界面功能冒烟', () => {
       await expect(page.getByText(/来源：照片辅助 \+ 用户明确确认/)).toBeVisible();
       await expect(page.getByText(new RegExp(`凭据 ${receipt}`)).first()).toBeVisible();
       await expect(page.getByText(/不保存图片路径或原始像素/)).toBeVisible();
+      await expect(page.getByText(/用户确认表示接受该版本，不等于系统证明照片中的身份匹配、人体测量精度或本人相似度正确/)).toBeVisible();
       await screenshot(page, '02a-photo-fit-timeline');
       await page.getByRole('button', { name: '关闭时间中的自己' }).click();
     } finally {
