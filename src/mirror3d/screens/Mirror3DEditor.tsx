@@ -130,6 +130,7 @@ export function Mirror3DEditor() {
   const [diary, setDiary] = useState(signals.diary);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoHint, setPhotoHint] = useState<string | null>(null);
+  const [storedOnlyExpanded, setStoredOnlyExpanded] = useState(false);
 
   useEffect(() => {
     recompute();
@@ -610,23 +611,73 @@ export function Mirror3DEditor() {
               </Section>
 
               <Section title="脸部与体型">
-                {IDENTITY_CONTROLS.map((c) => {
-                  const capability = AVATAR_PERSONALIZATION_CAPABILITIES[c.key];
-                  return (
-                    <SignalSlider
-                      key={c.key}
-                      label={c.label}
-                      value={identity[c.key] as number}
-                      min={0}
-                      max={1}
-                      step={0.02}
-                      format={(v) => v.toFixed(2)}
-                      capabilityStatus={capability.effect === 'rendered' ? '预览生效' : '当前仅保存'}
-                      capabilityDescription={capability.description}
-                      onValue={(v) => updateIdentity({ [c.key]: v } as Partial<IdentityLike>)}
-                    />
-                  );
-                })}
+                {IDENTITY_CONTROLS
+                  .filter((control) => AVATAR_PERSONALIZATION_CAPABILITIES[control.key].effect === 'rendered')
+                  .map((control) => {
+                    const capability = AVATAR_PERSONALIZATION_CAPABILITIES[control.key];
+                    return (
+                      <SignalSlider
+                        key={control.key}
+                        label={control.label}
+                        value={identity[control.key] as number}
+                        min={0}
+                        max={1}
+                        step={0.02}
+                        format={(v) => v.toFixed(2)}
+                        capabilityStatus="预览生效"
+                        capabilityDescription={capability.description}
+                        onValue={(v) => updateIdentity({ [control.key]: v } as Partial<IdentityLike>)}
+                      />
+                    );
+                  })}
+
+                <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: D.borderSoft, paddingTop: theme.spacing.sm }}>
+                  <Pressable
+                    onPress={() => setStoredOnlyExpanded((value) => !value)}
+                    accessibilityRole="button"
+                    accessibilityLabel={storedOnlyExpanded ? '收起当前仅保存参数' : '展开当前仅保存参数'}
+                    accessibilityState={{ expanded: storedOnlyExpanded }}
+                    style={({ pressed }) => ({
+                      minHeight: theme.touch.minTarget,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      opacity: pressed ? 0.72 : 1,
+                    })}
+                  >
+                    <View style={{ flex: 1, paddingRight: theme.spacing.sm }}>
+                      <Text style={{ color: D.textPrimary, fontSize: theme.font.small, fontWeight: '700' }}>
+                        更多精细参数 · 当前仅保存
+                      </Text>
+                      <Text style={{ color: D.textTertiary, fontSize: theme.font.tiny, lineHeight: 16, marginTop: 2 }}>
+                        下颌、眼睛、眼距、眉形、鼻子和嘴宽共 6 项；当前生产 VRM 无可验证身份 morph。
+                      </Text>
+                    </View>
+                    <Text style={{ color: D.textSecondary, fontSize: theme.font.body }}>
+                      {storedOnlyExpanded ? '⌃' : '⌄'}
+                    </Text>
+                  </Pressable>
+
+                  {storedOnlyExpanded && (
+                    <View style={{ marginTop: theme.spacing.sm }}>
+                      {IDENTITY_CONTROLS
+                        .filter((control) => AVATAR_PERSONALIZATION_CAPABILITIES[control.key].effect === 'stored-only')
+                        .map((control) => (
+                          <SignalSlider
+                            key={control.key}
+                            label={control.label}
+                            value={identity[control.key] as number}
+                            min={0}
+                            max={1}
+                            step={0.02}
+                            format={(v) => v.toFixed(2)}
+                            capabilityStatus="当前仅保存"
+                            onValue={(v) => updateIdentity({ [control.key]: v } as Partial<IdentityLike>)}
+                          />
+                        ))}
+                    </View>
+                  )}
+                </View>
               </Section>
 
               <Section title="正式形象颜色">
