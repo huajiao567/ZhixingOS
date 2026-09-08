@@ -99,7 +99,7 @@ test.describe('390x844 手机界面功能冒烟', () => {
     page.setDefaultTimeout(20_000);
   });
 
-  test('登录、记录与五条主路径均可操作', async ({ page }) => {
+  test('登录、记录、正式 VRM 个性化与 Timeline 均可操作', async ({ page }) => {
     test.setTimeout(240_000);
     await loginDemo(page);
     await page.waitForFunction(() => {
@@ -284,6 +284,11 @@ test.describe('390x844 手机界面功能冒烟', () => {
 
     await page.getByRole('button', { name: '返回主页' }).click();
     await expect(page.getByRole('button', { name: '现在的我' })).toBeVisible();
+  });
+
+  test('进程、秘书、数据主权与连接数据主路径均可操作', async ({ page }) => {
+    test.setTimeout(240_000);
+    await loginDemo(page);
 
     await page.getByRole('button', { name: /规划：/ }).click();
     await expect(page.getByText('进程', { exact: true }).first()).toBeVisible();
