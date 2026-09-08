@@ -3,8 +3,9 @@
  *
  * ─── 隐私承诺（SubTask 16.5）─────────────────────────────────────────
  * 照片像素只在本设备/浏览器会话中处理，不作为 MediaPipe 输入数据上传。
- *   - Web：图片在浏览器内解码后送入随应用 bundle 发布的 MediaPipe
- *         FaceLandmarker / PoseLandmarker；WASM 与模型按固定版本从外部源下载。
+ *   - Web：图片在浏览器内解码后送入构建产物中的 MediaPipe
+ *         FaceLandmarker / PoseLandmarker 懒加载 chunk；只有用户明确同意并开始
+ *         照片拟合时才加载该 JS。WASM 与模型按固定版本从外部源下载。
  *         MediaPipe 官方说明不发送输入图像数据，但 Tasks API 可能发送
  *         性能/使用指标。
  *   - Android：通过本项目的本地 Expo Module 调用随 APK 打包的 ML Kit
@@ -16,7 +17,6 @@
  */
 
 import { Platform } from 'react-native';
-import { FaceLandmarker, FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 import {
   detectNativeFaceLandmarks,
   detectNativePoseLandmarks,
@@ -96,17 +96,25 @@ interface TasksVisionExports {
   };
 }
 
-const BUNDLED_TASKS_VISION = {
-  FaceLandmarker,
-  PoseLandmarker,
-  FilesetResolver,
-} as unknown as TasksVisionExports;
+let bundledTasksVisionPromise: Promise<TasksVisionExports> | null = null;
 
-function loadBundledTasksVision(): TasksVisionExports {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    return BUNDLED_TASKS_VISION;
+async function loadBundledTasksVision(): Promise<TasksVisionExports> {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    throw new Error('MediaPipe is only supported on web');
   }
-  throw new Error('MediaPipe is only supported on web');
+  if (!bundledTasksVisionPromise) {
+    bundledTasksVisionPromise = import('@mediapipe/tasks-vision')
+      .then((vision) => ({
+        FaceLandmarker: vision.FaceLandmarker,
+        PoseLandmarker: vision.PoseLandmarker,
+        FilesetResolver: vision.FilesetResolver,
+      }) as unknown as TasksVisionExports)
+      .catch((error) => {
+        bundledTasksVisionPromise = null;
+        throw error;
+      });
+  }
+  return bundledTasksVisionPromise;
 }
 
 /**
@@ -130,7 +138,7 @@ let poseLandmarkerPromise: Promise<PoseLandmarkerLike> | null = null;
 async function getFaceLandmarker(): Promise<FaceLandmarkerLike> {
   if (!faceLandmarkerPromise) {
     faceLandmarkerPromise = (async () => {
-      const vision = loadBundledTasksVision();
+      const vision = await loadBundledTasksVision();
       const fileset = await vision.FilesetResolver.forVisionTasks(`${MEDIAPIPE_CDN}/wasm`);
       return createWithDelegateFallback((delegate) =>
         vision.FaceLandmarker.createFromOptions(fileset, {
@@ -147,7 +155,7 @@ async function getFaceLandmarker(): Promise<FaceLandmarkerLike> {
 async function getPoseLandmarker(): Promise<PoseLandmarkerLike> {
   if (!poseLandmarkerPromise) {
     poseLandmarkerPromise = (async () => {
-      const vision = loadBundledTasksVision();
+      const vision = await loadBundledTasksVision();
       const fileset = await vision.FilesetResolver.forVisionTasks(`${MEDIAPIPE_CDN}/wasm`);
       return createWithDelegateFallback((delegate) =>
         vision.PoseLandmarker.createFromOptions(fileset, {
