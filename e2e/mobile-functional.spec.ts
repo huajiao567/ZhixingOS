@@ -110,9 +110,10 @@ test.describe('390x844 手机界面功能冒烟', () => {
     await recordInput.fill('昨晚熬夜，只睡了 4.5 小时，今天压力很大');
     await page.getByRole('button', { name: '发送' }).click();
     await expect(page.getByText(/已收进今天/)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/昨晚熬夜，只睡了 4.5 小时/)).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: '展开今天的记录' }).click();
-    await expect(page.getByText('文字', { exact: true }).first()).toBeVisible();
+    await expect(
+      page.getByLabel(/今天记录，文字，\d{2}:\d{2}，昨晚熬夜，只睡了 4\.5 小时，今天压力很大/),
+    ).toBeVisible({ timeout: 10_000 });
     await screenshot(page, '01b-today-records');
     await page.getByRole('button', { name: '收起今天的记录' }).click();
 
