@@ -335,17 +335,21 @@ test.describe('390x844 手机界面功能冒烟', () => {
       expect(event.userInterpretation).not.toContain(MEDIAPIPE_PORTRAIT_FIXTURE.fileName);
 
       await expect(page.getByText(/照片已收进今天/)).toBeVisible({ timeout: 20_000 });
-      await page.getByRole('button', { name: '展开今天的记录' }).click();
-      await expect(page.getByLabel(/今天记录，照片，\d{2}:\d{2}，照片记录/)).toBeVisible();
+      const undoButton = page.getByRole('button', { name: '撤回' });
+      await expect(undoButton).toBeVisible({ timeout: 3_000 });
+      // Preserve the product's real five-second undo contract: validate and
+      // exercise the transient control immediately instead of spending the
+      // window expanding secondary UI first.
       await screenshot(page, '01c-photo-record-provenance');
-
       const deleteRequestPromise = page.waitForRequest((request) =>
         request.url().includes('/api/data/events/')
         && request.method() === 'DELETE',
       );
-      await page.getByRole('button', { name: '撤回' }).click();
-      await deleteRequestPromise;
+      await undoButton.click({ timeout: 3_000 });
+      const deleteRequest = await deleteRequestPromise;
+      expect(deleteRequest.url()).toContain('/api/data/events/j-');
       await expect(page.getByText('已撤回这条记录', { exact: true })).toBeVisible();
+      await expect(page.getByText(/照片已收进今天/)).toHaveCount(0);
     } finally {
       clearMediaPipePortraitFixture(fixturePath);
     }
