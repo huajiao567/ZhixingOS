@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { LifeEvent } from '../types/models';
-import { journalSourceLabel } from '../ai-native/intake/journalRecord';
+import { journalPreviewText, journalSourceLabel } from '../ai-native/intake/journalRecord';
 import { useAppTheme } from '../theme/theme';
 
 function isSameLocalDay(iso: string, now = new Date()): boolean {
@@ -13,15 +13,7 @@ function isSameLocalDay(iso: string, now = new Date()): boolean {
 }
 
 function recordText(event: LifeEvent): string {
-  const text = event.userInterpretation?.trim();
-  if (text) {
-    const firstLine = text.split(/\r?\n/).find((line) => line.trim())?.trim();
-    // Emoji are astral Unicode code points. Without the `u` flag the
-    // character class can match only one surrogate half and leave the icon in
-    // both visible text and the accessibility label.
-    if (firstLine) return firstLine.replace(/^[📷🎤]\s*/u, '');
-  }
-  return event.title.replace(/^(日记|照片记录|语音记录|孪生记录)：/, '');
+  return journalPreviewText(event.userInterpretation, event.title);
 }
 
 function timeLabel(iso: string): string {
