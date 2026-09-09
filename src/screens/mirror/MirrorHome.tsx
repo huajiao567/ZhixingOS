@@ -366,6 +366,9 @@ export function MirrorHome() {
     if (id) {
       await s.forgetEvent(id);
     }
+    // 照片保存后会放入一个“📷 ”低摩擦补充说明提示。若用户立刻撤回且尚未
+    // 输入任何自己的文字，就一起清掉；一旦已经补写内容则绝不擅自删除。
+    setTextInput((value) => value.trim() === '📷' ? '' : value);
     setSaveFeedbackText('已撤回这条记录');
     setShowSaveFeedback(true);
     feedbackAnim.setValue(1);
