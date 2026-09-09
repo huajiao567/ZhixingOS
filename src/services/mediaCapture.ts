@@ -90,11 +90,11 @@ export async function takePhoto(): Promise<CapturedPhoto | null> {
   });
   if (result.canceled || !result.assets?.[0]) return null;
   const photo = assetToCapturedPhoto(result.assets[0]);
-  const permission = await registerSourcePermission('photo', '仅保存用户主动拍摄照片的不透明来源凭据和尺寸，不自动上传路径或像素', {
+  const sourcePermission = await registerSourcePermission('photo', '仅保存用户主动拍摄照片的不透明来源凭据和尺寸，不自动上传路径或像素', {
     access: 'captured_asset_only',
     upload: false,
   });
-  return { ...photo, consentId: permission.id };
+  return { ...photo, consentId: sourcePermission.id };
 }
 
 /**
