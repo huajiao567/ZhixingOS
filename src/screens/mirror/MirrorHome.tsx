@@ -901,6 +901,7 @@ export function MirrorHome() {
               return s;
             }}
             accessibilityLabel="选择照片记录"
+            accessibilityRole="button"
             hitSlop={8}
           >
             <Glyph name="photo" size={21} color={theme.colors.textSecondary} />
