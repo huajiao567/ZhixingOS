@@ -338,9 +338,9 @@ test.describe('390x844 手机界面功能冒烟', () => {
       const undoButton = page.getByRole('button', { name: '撤回' });
       await expect(undoButton).toBeVisible({ timeout: 3_000 });
       // Preserve the product's real five-second undo contract: validate and
-      // exercise the transient control immediately instead of spending the
-      // window expanding secondary UI first.
-      await screenshot(page, '01c-photo-record-provenance');
+      // exercise the transient control before any screenshot work. WebGL
+      // capture can take several seconds on CI and must not redefine the
+      // product's real undo window.
       const deleteRequestPromise = page.waitForRequest((request) =>
         request.url().includes('/api/data/events/')
         && request.method() === 'DELETE',
@@ -350,6 +350,7 @@ test.describe('390x844 手机界面功能冒烟', () => {
       expect(deleteRequest.url()).toContain('/api/data/events/j-');
       await expect(page.getByText('已撤回这条记录', { exact: true })).toBeVisible();
       await expect(page.getByText(/照片已收进今天/)).toHaveCount(0);
+      await screenshot(page, '01c-photo-record-undone');
     } finally {
       clearMediaPipePortraitFixture(fixturePath);
     }
