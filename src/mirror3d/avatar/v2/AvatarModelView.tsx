@@ -26,8 +26,10 @@ import type { AvatarProfileV2 } from './avatarTypes';
 import { useAppTheme } from '../../../theme/theme';
 import { VRMAvatarView, type AvatarLoadState } from './VRMAvatarView';
 
-// 交给 Metro 管理，确保 development、production Web 导出和原生 APK 都引用同一份真实模型。
-const BUNDLED_VRM = require('../../../../public/avatar/AvatarSample_G.glb') as string;
+// Web 直接使用 Expo public 根路径。若这里 static require public/avatar，Expo export
+// 会同时保留 /avatar/AvatarSample_G.glb 和一份 Metro hashed asset，白白把 15.3 MB
+// 生产模型复制两次。原生仍由 AvatarModelView.native.tsx 静态 require 写入 APK。
+const BUNDLED_VRM = '/avatar/AvatarSample_G.glb';
 
 /* ───────────── 可诊断状态（WebGL 不可用 / 加载失败） ───────────── */
 
