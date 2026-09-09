@@ -4,6 +4,8 @@ export type JournalSourceRef = 'text-diary' | 'photo-note' | 'voice-note' | 'ava
 
 export interface JournalInputOptions {
   sourceRef?: JournalSourceRef;
+  /** Exact persisted source-permission row when the record came from captured media. */
+  consentId?: string;
   domain?: Domain;
   sensitivity?: Sensitivity;
   titlePrefix?: string;
@@ -33,10 +35,22 @@ export function inferJournalDomain(text: string): Domain {
 
 export function journalSourceLabel(sourceRef: string): '文字' | '照片' | '语音' | '孪生' | '记录' {
   if (sourceRef.startsWith('photo')) return '照片';
-  if (sourceRef.startsWith('voice')) return '语音';
+  if (sourceRef.startsWith('voice') || sourceRef.startsWith('audio')) return '语音';
   if (sourceRef.startsWith('avatar')) return '孪生';
   if (sourceRef.startsWith('text')) return '文字';
   return '记录';
+}
+
+export function journalPreviewText(text: string | undefined, title: string): string {
+  const clean = text?.trim();
+  if (clean) {
+    const firstLine = clean.split(/\r?\n/).find((line) => line.trim())?.trim();
+    // Photo/microphone markers are astral Unicode code points. The `u` flag
+    // is required so the prefix is removed as one code point rather than a
+    // surrogate half, keeping visible and accessibility text deterministic.
+    if (firstLine) return firstLine.replace(/^[📷🎤]\s*/u, '');
+  }
+  return title.replace(/^(日记|照片记录|语音记录|孪生记录)：/, '');
 }
 
 export function journalTitle(text: string, prefix = '日记'): string {

@@ -134,6 +134,22 @@ export const useStore = create<AppState>((set, get) => {
     set({ sync: { pending: st.pending, conflicts: st.conflicts, lastError: null } });
   };
 
+  /**
+   * Records and user-requested deletion need an immediate delivery attempt.
+   * They remain offline-first: enqueue first, then flush; failed delivery stays
+   * in the durable queue instead of being presented as a completed sync.
+   */
+  const enqueueAndFlush = async (
+    method: 'POST' | 'PATCH' | 'DELETE',
+    path: string,
+    body: unknown,
+    idempotencyKey: string,
+  ) => {
+    await enqueue({ method, path, body, idempotencyKey });
+    const st = await flush();
+    set({ sync: st });
+  };
+
   return {
     user: defaultUser,
     events: [],
@@ -352,15 +368,17 @@ export const useStore = create<AppState>((set, get) => {
         domain: options.domain ?? inferJournalDomain(clean),
         sensitivity: options.sensitivity ?? 'sensitive',
         confidence: 1,
-        consentId: 'perm-journal',
+        consentId: options.consentId ?? 'perm-journal',
         layer: 'fact',
         axis: 'inner',
         userInterpretation: clean,
       };
       set((s) => ({ events: [ev, ...s.events] }));
       get().pushAudit('用户', `记录一条${journalSourceLabel(sourceRef)}记录`);
-      pushMutation('POST', '/api/data/events', ev, `ev:${ev.id}`);
-      try { await get().refreshState(); } catch { /* 网络重试由同步层负责 */ }
+      // 先持久入队，再立即尝试服务端写入。网络失败仍保留本地记录和待同步队列，
+      // 因此调用完成只代表“记录已进入本机时间线”，不等价于云端已同步。
+      await enqueueAndFlush('POST', '/api/data/events', ev, `ev:${ev.id}`);
+      try { await get().refreshState(); } catch { /* 网络失败不撤销本地已记录事实 */ }
     },
 
     addCommitment: async (c) => {
@@ -373,9 +391,11 @@ export const useStore = create<AppState>((set, get) => {
 
     forgetEvent: async (id) => {
       set((s) => ({ events: s.events.filter((e) => e.id !== id) }));
-      get().pushAudit('用户', `删除事件 ${id}：原始记录与派生推断已彻底清除`);
-      pushMutation('DELETE', `/api/data/events/${id}`, undefined, `evdel:${id}`);
-      try { await get().refreshState(); } catch { /* 网络重试由同步层负责 */ }
+      // 这里仅承诺撤回事件记录；媒体文件是否仍存在于本机由各媒体生命周期单独管理，
+      // 不再使用“原始内容已彻底清除”这类超过当前实现证据的审计文案。
+      get().pushAudit('用户', `撤回事件记录 ${id}`);
+      await enqueueAndFlush('DELETE', `/api/data/events/${id}`, undefined, `evdel:${id}`);
+      try { await get().refreshState(); } catch { /* 网络失败时删除操作保留在待同步队列 */ }
     },
 
     refreshState: async () => {

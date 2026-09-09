@@ -355,7 +355,7 @@ export function MirrorHome() {
     if (id) {
       await s.forgetEvent(id);
     }
-    setSaveFeedbackText('已撤回 · 内容没有留下');
+    setSaveFeedbackText('已撤回这条记录');
     setShowSaveFeedback(true);
     feedbackAnim.setValue(1);
     setTimeout(() => {
@@ -425,7 +425,7 @@ export function MirrorHome() {
           mimeType: photo.mimeType,
           origin: mode,
         },
-        { consentId: 'user-direct-input' },
+        { consentId: photo.consentId },
       );
       assertEnvelopeTraceable(envelope);
       await s.addJournal([
@@ -435,12 +435,15 @@ export function MirrorHome() {
         `引用凭据：${photo.sourceRef}`,
         '保存去向：今日日记 · 5 秒内可撤回',
       ].join('\n'), {
-        sourceRef: 'photo-note',
+        // Persist the opaque capture receipt itself as the event provenance;
+        // TodayRecordStrip derives the human label from the prefix.
+        sourceRef: photo.sourceRef,
+        consentId: photo.consentId,
         titlePrefix: '照片记录',
         sensitivity: 'sensitive',
       });
       const id = await captureEventIdAfterAdd(0);
-      triggerSaveFeedback('照片已保存 · 可补一句说明', id);
+      triggerSaveFeedback('照片已收进今天 · 可补一句说明', id);
       triggerInhale('📷 照片');
       noteCheckInPatch();
       setAvatarAckTrigger((v) => v + 1);
@@ -509,13 +512,15 @@ export function MirrorHome() {
         `引用凭据：${captured.sourceRef}`,
         `时长：${captured.durationMs}ms`,
         `类型：${captured.mimeType}`,
+        '隐私边界：事件同步不包含录音文件路径或音频字节；原始录音只存在应用本地文件。',
       ].join('\n'), {
-        sourceRef: 'voice-note',
+        sourceRef: captured.sourceRef,
+        consentId: captured.consentId,
         titlePrefix: '语音记录',
         sensitivity: 'sensitive',
       });
       const id = await captureEventIdAfterAdd(0);
-      triggerSaveFeedback('语音已真实保存', id);
+      triggerSaveFeedback('语音记录已收进今天', id);
       triggerInhale(label);
       noteCheckInPatch();
       setAvatarAckTrigger((v) => v + 1);
@@ -850,7 +855,12 @@ export function MirrorHome() {
           <View style={[styles.saveFeedbackDot, { backgroundColor: theme.colors.green }]} />
           <Text style={{ color: theme.colors.textSecondary, fontSize: theme.font.small, fontWeight: '500' }}>{saveFeedbackText}</Text>
           {undoEventId.current ? (
-            <Pressable onPress={handleUndo} hitSlop={8} accessibilityLabel="撤回">
+            <Pressable
+              onPress={handleUndo}
+              hitSlop={8}
+              accessibilityLabel="撤回"
+              accessibilityRole="button"
+            >
               <Text style={{ color: theme.colors.primaryMuted, fontSize: theme.font.small, fontWeight: '700' }}>撤回</Text>
             </Pressable>
           ) : null}
@@ -896,6 +906,7 @@ export function MirrorHome() {
               return s;
             }}
             accessibilityLabel="选择照片记录"
+            accessibilityRole="button"
             hitSlop={8}
           >
             <Glyph name="photo" size={21} color={theme.colors.textSecondary} />

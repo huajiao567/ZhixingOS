@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { File, Paths } from 'expo-file-system';
@@ -19,6 +20,8 @@ export interface CapturedPhoto {
   fileSize?: number;
   assetId?: string;
   sourceRef: string;
+  /** Persisted source-permission row authorizing this exact capture path. */
+  consentId: string;
 }
 
 export interface CapturedAudio {
@@ -26,7 +29,11 @@ export interface CapturedAudio {
   durationMs: number;
   mimeType: string;
   sourceRef: string;
+  /** Persisted microphone source-permission row for this recording session. */
+  consentId: string;
 }
+
+type CapturedPhotoDraft = Omit<CapturedPhoto, 'consentId'>;
 
 function opaqueLocalReference(kind: 'photo' | 'audio', value: string): string {
   let result = 2166136261;
@@ -37,7 +44,7 @@ function opaqueLocalReference(kind: 'photo' | 'audio', value: string): string {
   return `${kind}:local:${(result >>> 0).toString(36)}`;
 }
 
-function assetToCapturedPhoto(asset: ImagePicker.ImagePickerAsset): CapturedPhoto {
+function assetToCapturedPhoto(asset: ImagePicker.ImagePickerAsset): CapturedPhotoDraft {
   if (!asset.uri) throw new Error('系统没有返回可读取的照片 URI');
   return {
     uri: asset.uri,
@@ -64,11 +71,11 @@ export async function pickPhoto(): Promise<CapturedPhoto | null> {
   });
   if (result.canceled || !result.assets?.[0]) return null;
   const photo = assetToCapturedPhoto(result.assets[0]);
-  await registerSourcePermission('photo', '仅保存用户主动选择照片的不透明来源凭据和尺寸，不自动上传路径或像素', {
+  const permission = await registerSourcePermission('photo', '仅保存用户主动选择照片的不透明来源凭据和尺寸，不自动上传路径或像素', {
     access: 'selected_asset_only',
     upload: false,
   });
-  return photo;
+  return { ...photo, consentId: permission.id };
 }
 
 export async function takePhoto(): Promise<CapturedPhoto | null> {
@@ -83,11 +90,11 @@ export async function takePhoto(): Promise<CapturedPhoto | null> {
   });
   if (result.canceled || !result.assets?.[0]) return null;
   const photo = assetToCapturedPhoto(result.assets[0]);
-  await registerSourcePermission('photo', '仅保存用户主动拍摄照片的不透明来源凭据和尺寸，不自动上传路径或像素', {
+  const sourcePermission = await registerSourcePermission('photo', '仅保存用户主动拍摄照片的不透明来源凭据和尺寸，不自动上传路径或像素', {
     access: 'captured_asset_only',
     upload: false,
   });
-  return photo;
+  return { ...photo, consentId: sourcePermission.id };
 }
 
 /**
@@ -122,6 +129,7 @@ function deleteAppOwnedAudio(uri: string | null): boolean {
 export function useAudioCapture() {
   const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, directory: 'document' });
   const state = useAudioRecorderState(recorder, 200);
+  const consentIdRef = useRef<string | null>(null);
 
   return {
     isRecording: state.isRecording,
@@ -130,11 +138,12 @@ export function useAudioCapture() {
     start: async (): Promise<void> => {
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       if (!permission.granted) throw new Error('麦克风权限未获授权，录音没有开始');
-      await registerSourcePermission('microphone', '仅在按下录音后采集声音；服务端只保存不含原始路径的不透明来源凭据', {
+      const sourcePermission = await registerSourcePermission('microphone', '仅在按下录音后采集声音；服务端只保存不含原始路径的不透明来源凭据', {
         access: 'foreground_recording',
         background: false,
         upload: false,
       });
+      consentIdRef.current = sourcePermission.id;
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
       recorder.record();
@@ -146,11 +155,15 @@ export function useAudioCapture() {
       await setAudioModeAsync({ allowsRecording: false });
       const uri = recorder.uri;
       if (!uri) throw new Error('录音停止后没有生成文件 URI，未写入记录');
+      const consentId = consentIdRef.current;
+      consentIdRef.current = null;
+      if (!consentId) throw new Error('录音缺少可追溯的麦克风授权记录，已阻止写入');
       return {
         uri,
         durationMs,
         mimeType: Platform.OS === 'web' ? 'audio/webm' : 'audio/mp4',
         sourceRef: opaqueLocalReference('audio', uri),
+        consentId,
       };
     },
 
@@ -158,6 +171,7 @@ export function useAudioCapture() {
       if (state.isRecording) await recorder.stop();
       await setAudioModeAsync({ allowsRecording: false });
       deleteAppOwnedAudio(recorder.uri);
+      consentIdRef.current = null;
     },
   };
 }

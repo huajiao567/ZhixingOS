@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { inferJournalDomain, journalSourceLabel, journalTitle } from '../src/ai-native/intake/journalRecord';
+import { inferJournalDomain, journalPreviewText, journalSourceLabel, journalTitle } from '../src/ai-native/intake/journalRecord';
 
 test('journal domain inference favors concrete life domains', () => {
   assert.equal(inferJournalDomain('昨晚只睡了4小时，今天很累'), '身体');
@@ -14,9 +14,17 @@ test('journal source labels stay explicit', () => {
   assert.equal(journalSourceLabel('text-diary'), '文字');
   assert.equal(journalSourceLabel('photo-note'), '照片');
   assert.equal(journalSourceLabel('voice-note'), '语音');
+  assert.equal(journalSourceLabel('audio:local:abc123'), '语音');
+  assert.equal(journalSourceLabel('photo:local:def456'), '照片');
   assert.equal(journalSourceLabel('avatar-editor'), '孪生');
   assert.equal(journalSourceLabel('avatar-editor:photo:local:abc123'), '孪生');
   assert.equal(journalSourceLabel('external'), '记录');
+});
+
+test('journal media previews strip astral emoji without corrupting timeline labels', () => {
+  assert.equal(journalPreviewText('📷 照片记录\n引用凭据：photo:local:abc', '照片记录：备用'), '照片记录');
+  assert.equal(journalPreviewText('🎤 语音记录\n时长：1200ms', '语音记录：备用'), '语音记录');
+  assert.equal(journalPreviewText(undefined, '照片记录：周末散步'), '周末散步');
 });
 
 test('journal titles are compact and deterministic', () => {

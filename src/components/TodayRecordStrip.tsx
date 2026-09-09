@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { LifeEvent } from '../types/models';
-import { journalSourceLabel } from '../ai-native/intake/journalRecord';
+import { journalPreviewText, journalSourceLabel } from '../ai-native/intake/journalRecord';
 import { useAppTheme } from '../theme/theme';
 
 function isSameLocalDay(iso: string, now = new Date()): boolean {
@@ -13,12 +13,7 @@ function isSameLocalDay(iso: string, now = new Date()): boolean {
 }
 
 function recordText(event: LifeEvent): string {
-  const text = event.userInterpretation?.trim();
-  if (text) {
-    const firstLine = text.split(/\r?\n/).find((line) => line.trim())?.trim();
-    if (firstLine) return firstLine.replace(/^[📷🎤]\s*/, '');
-  }
-  return event.title.replace(/^(日记|照片记录|语音记录|孪生记录)：/, '');
+  return journalPreviewText(event.userInterpretation, event.title);
 }
 
 function timeLabel(iso: string): string {
