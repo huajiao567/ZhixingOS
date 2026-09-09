@@ -71,6 +71,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit production avatar model
+        run: npm run audit:avatar-model
+
       - name: Export web production bundle
         env:
           CI: "1"
