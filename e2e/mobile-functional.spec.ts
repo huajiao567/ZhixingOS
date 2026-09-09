@@ -334,7 +334,7 @@ test.describe('390x844 手机界面功能冒烟', () => {
       expect(event.userInterpretation).not.toContain('blob:');
       expect(event.userInterpretation).not.toContain(MEDIAPIPE_PORTRAIT_FIXTURE.fileName);
 
-      await expect(page.getByText(/照片已保存/)).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText(/照片已收进今天/)).toBeVisible({ timeout: 20_000 });
       await page.getByRole('button', { name: '展开今天的记录' }).click();
       await expect(page.getByLabel(/今天记录，照片，\d{2}:\d{2}，照片记录/)).toBeVisible();
       await screenshot(page, '01c-photo-record-provenance');
@@ -345,7 +345,7 @@ test.describe('390x844 手机界面功能冒烟', () => {
       );
       await page.getByRole('button', { name: '撤回' }).click();
       await deleteRequestPromise;
-      await expect(page.getByText('已撤回 · 内容没有留下', { exact: true })).toBeVisible();
+      await expect(page.getByText('已撤回这条记录', { exact: true })).toBeVisible();
     } finally {
       clearMediaPipePortraitFixture(fixturePath);
     }
