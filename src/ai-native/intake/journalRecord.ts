@@ -41,6 +41,18 @@ export function journalSourceLabel(sourceRef: string): '文字' | '照片' | '�
   return '记录';
 }
 
+export function journalPreviewText(text: string | undefined, title: string): string {
+  const clean = text?.trim();
+  if (clean) {
+    const firstLine = clean.split(/\r?\n/).find((line) => line.trim())?.trim();
+    // Photo/microphone markers are astral Unicode code points. The `u` flag
+    // is required so the prefix is removed as one code point rather than a
+    // surrogate half, keeping visible and accessibility text deterministic.
+    if (firstLine) return firstLine.replace(/^[📷🎤]\s*/u, '');
+  }
+  return title.replace(/^(日记|照片记录|语音记录|孪生记录)：/, '');
+}
+
 export function journalTitle(text: string, prefix = '日记'): string {
   const clean = text.replace(/\s+/g, ' ').trim();
   return `${prefix}：${clean.slice(0, 18)}${clean.length > 18 ? '…' : ''}`;
