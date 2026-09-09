@@ -16,7 +16,10 @@ function recordText(event: LifeEvent): string {
   const text = event.userInterpretation?.trim();
   if (text) {
     const firstLine = text.split(/\r?\n/).find((line) => line.trim())?.trim();
-    if (firstLine) return firstLine.replace(/^[📷🎤]\s*/, '');
+    // Emoji are astral Unicode code points. Without the `u` flag the
+    // character class can match only one surrogate half and leave the icon in
+    // both visible text and the accessibility label.
+    if (firstLine) return firstLine.replace(/^[📷🎤]\s*/u, '');
   }
   return event.title.replace(/^(日记|照片记录|语音记录|孪生记录)：/, '');
 }
