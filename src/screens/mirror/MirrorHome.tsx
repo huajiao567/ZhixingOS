@@ -355,7 +355,7 @@ export function MirrorHome() {
     if (id) {
       await s.forgetEvent(id);
     }
-    setSaveFeedbackText('已撤回 · 内容没有留下');
+    setSaveFeedbackText('已撤回这条记录');
     setShowSaveFeedback(true);
     feedbackAnim.setValue(1);
     setTimeout(() => {
@@ -443,7 +443,7 @@ export function MirrorHome() {
         sensitivity: 'sensitive',
       });
       const id = await captureEventIdAfterAdd(0);
-      triggerSaveFeedback('照片已保存 · 可补一句说明', id);
+      triggerSaveFeedback('照片已收进今天 · 可补一句说明', id);
       triggerInhale('📷 照片');
       noteCheckInPatch();
       setAvatarAckTrigger((v) => v + 1);
@@ -520,7 +520,7 @@ export function MirrorHome() {
         sensitivity: 'sensitive',
       });
       const id = await captureEventIdAfterAdd(0);
-      triggerSaveFeedback('语音已真实保存', id);
+      triggerSaveFeedback('语音记录已收进今天', id);
       triggerInhale(label);
       noteCheckInPatch();
       setAvatarAckTrigger((v) => v + 1);
