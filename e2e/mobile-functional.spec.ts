@@ -345,11 +345,12 @@ test.describe('390x844 手机界面功能冒烟', () => {
         request.url().includes('/api/data/events/')
         && request.method() === 'DELETE',
       );
-      await undoButton.click({ timeout: 3_000 });
+      await undoButton.tap({ timeout: 4_000 });
       const deleteRequest = await deleteRequestPromise;
       expect(deleteRequest.url()).toContain('/api/data/events/j-');
       await expect(page.getByText('已撤回这条记录', { exact: true })).toBeVisible();
       await expect(page.getByText(/照片已收进今天/)).toHaveCount(0);
+      await expect(page.getByLabel('快速记录')).toHaveValue('');
       await screenshot(page, '01c-photo-record-undone');
     } finally {
       clearMediaPipePortraitFixture(fixturePath);

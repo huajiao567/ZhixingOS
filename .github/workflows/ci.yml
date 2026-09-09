@@ -77,6 +77,9 @@ jobs:
           EXPO_PUBLIC_API_BASE: http://127.0.0.1:3001
         run: npm run build:web
 
+      - name: Verify production VRM is not duplicated
+        run: npm run check:web-avatar-bundle
+
       - name: Upload web artifact
         uses: actions/upload-artifact@v7
         with:

@@ -247,6 +247,7 @@ export function MirrorHome() {
   const inhaleAnim = useRef(new Animated.Value(0)).current;
   const inputRef = useRef<TextInput>(null);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const feedbackSequence = useRef(0);
   const undoEventId = useRef<string | null>(null);
   const voiceTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const voicePressStart = useRef<{ x: number; y: number } | null>(null);
@@ -333,28 +334,41 @@ export function MirrorHome() {
 
   /* ───── 保存反馈（含撤回 5s） ───── */
   const triggerSaveFeedback = useCallback((text: string, eventId: string | null) => {
+    const sequence = ++feedbackSequence.current;
     undoEventId.current = eventId;
     setSaveFeedbackText(text);
     setShowSaveFeedback(true);
-    feedbackAnim.setValue(0);
-    Animated.timing(feedbackAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
     if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-    feedbackTimer.current = setTimeout(() => {
-      Animated.timing(feedbackAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
-        setShowSaveFeedback(false);
-        undoEventId.current = null;
-      });
-    }, 5000);
+    feedbackAnim.stopAnimation();
+    feedbackAnim.setValue(0);
+    Animated.timing(feedbackAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start(({ finished }) => {
+      // “5 秒撤回”从反馈真正显示完成后开始计时，避免淡入动画吞掉用户可操作时间。
+      // sequence 防止旧动画回调为更新后的反馈误挂一个过期计时器。
+      if (!finished || feedbackSequence.current !== sequence) return;
+      feedbackTimer.current = setTimeout(() => {
+        if (feedbackSequence.current !== sequence) return;
+        Animated.timing(feedbackAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
+          if (feedbackSequence.current !== sequence) return;
+          setShowSaveFeedback(false);
+          undoEventId.current = null;
+        });
+      }, 5000);
+    });
   }, [feedbackAnim]);
 
   const handleUndo = useCallback(async () => {
+    feedbackSequence.current += 1;
     if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    feedbackAnim.stopAnimation();
     const id = undoEventId.current;
     undoEventId.current = null;
     setShowSaveFeedback(false);
     if (id) {
       await s.forgetEvent(id);
     }
+    // 照片保存后会放入一个“📷 ”低摩擦补充说明提示。若用户立刻撤回且尚未
+    // 输入任何自己的文字，就一起清掉；一旦已经补写内容则绝不擅自删除。
+    setTextInput((value) => value.trim() === '📷' ? '' : value);
     setSaveFeedbackText('已撤回这条记录');
     setShowSaveFeedback(true);
     feedbackAnim.setValue(1);
@@ -857,9 +871,17 @@ export function MirrorHome() {
           {undoEventId.current ? (
             <Pressable
               onPress={handleUndo}
-              hitSlop={8}
               accessibilityLabel="撤回"
+              accessibilityHint="5 秒内撤回刚才这条记录"
               accessibilityRole="button"
+              hitSlop={4}
+              style={({ pressed }) => ({
+                minWidth: theme.touch.minTarget,
+                minHeight: theme.touch.minTarget,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: pressed ? 0.65 : 1,
+              })}
             >
               <Text style={{ color: theme.colors.primaryMuted, fontSize: theme.font.small, fontWeight: '700' }}>撤回</Text>
             </Pressable>

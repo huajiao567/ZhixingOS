@@ -71,6 +71,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:web": "expo export --platform web",
+    "check:web-avatar-bundle": "node scripts/check-web-avatar-bundle.mjs",
     "build:apk": "powershell -ExecutionPolicy Bypass -File scripts/build-apk.ps1",
     "backend:phone": "powershell -ExecutionPolicy Bypass -File scripts/start-phone-backend.ps1",
     "typecheck": "tsc --noEmit",
