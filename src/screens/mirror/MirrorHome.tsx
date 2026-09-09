@@ -855,7 +855,12 @@ export function MirrorHome() {
           <View style={[styles.saveFeedbackDot, { backgroundColor: theme.colors.green }]} />
           <Text style={{ color: theme.colors.textSecondary, fontSize: theme.font.small, fontWeight: '500' }}>{saveFeedbackText}</Text>
           {undoEventId.current ? (
-            <Pressable onPress={handleUndo} hitSlop={8} accessibilityLabel="撤回">
+            <Pressable
+              onPress={handleUndo}
+              hitSlop={8}
+              accessibilityLabel="撤回"
+              accessibilityRole="button"
+            >
               <Text style={{ color: theme.colors.primaryMuted, fontSize: theme.font.small, fontWeight: '700' }}>撤回</Text>
             </Pressable>
           ) : null}
