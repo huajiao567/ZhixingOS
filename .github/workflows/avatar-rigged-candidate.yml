@@ -1,0 +1,126 @@
+name: Avatar rigged VRM candidate
+
+on:
+  push:
+    branches:
+      - ai/avatar-rigged-vrm-candidate-v1
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/avatar-rigged-candidate.yml"
+      - "scripts/build-makehuman-vrm-candidate.py"
+      - "scripts/probe-rigged-vrm-candidate.mjs"
+      - "scripts/audit-avatar-model.mjs"
+      - "docs/MAKEHUMAN_RIGGED_VRM_CANDIDATE.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: avatar-rigged-candidate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rigged-candidate:
+    name: P0 rigged VRM runtime candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.2
+          cache: npm
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Self-test deterministic builder
+        run: python scripts/build-makehuman-vrm-candidate.py --self-test
+
+      - name: Build candidate from pinned MakeHuman CC0 core assets
+        run: python scripts/build-makehuman-vrm-candidate.py --output-dir artifacts/makehuman-rigged-candidate
+
+      - name: Audit VRM metadata, core humanoid and structural families
+        shell: bash
+        run: |
+          node scripts/audit-avatar-model.mjs \
+            artifacts/makehuman-rigged-candidate/MakeHuman_Core_Rigged_Candidate.vrm \
+            --require-families=faceContour,eye,nose,mouth \
+            --max-bytes=5000000 \
+            --output=artifacts/makehuman-rigged-candidate/avatar-audit.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          audit = json.loads(Path('artifacts/makehuman-rigged-candidate/avatar-audit.json').read_text())
+          if audit['vrm']['version'] != '0.x':
+              raise SystemExit(f"expected VRM0 candidate, got {audit['vrm']['version']}")
+          if audit['vrm']['missingCoreBones']:
+              raise SystemExit(f"missing core humanoid bones: {audit['vrm']['missingCoreBones']}")
+          if audit['vrm']['license'].get('licenseName') != 'CC0':
+              raise SystemExit(f"unexpected embedded candidate license: {audit['vrm']['license']}")
+          print('[rigged-candidate-audit-gate]', json.dumps({
+              'vrm': audit['vrm']['version'],
+              'humanoidBoneCount': audit['vrm']['humanoidBoneCount'],
+              'missingCoreBones': audit['vrm']['missingCoreBones'],
+              'namedStructuralFamilyCount': audit['morphs']['namedStructuralFamilyCount'],
+              'bytes': audit['bytes'],
+              'sha256': audit['sha256'],
+          }))
+          PY
+
+      - name: Parse candidate through installed three-vrm runtime
+        run: node scripts/probe-rigged-vrm-candidate.mjs artifacts/makehuman-rigged-candidate/MakeHuman_Core_Rigged_Candidate.vrm
+
+      - name: Classify skin-weight evidence boundary
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report_path = Path('artifacts/makehuman-rigged-candidate/report.json')
+          report = json.loads(report_path.read_text())
+          skin = report['skin']
+          if skin['unassignedVertexCount'] != 0:
+              raise SystemExit(f"research candidate has unassigned vertices: {skin}")
+          if skin['meanRetainedRawWeightRatio'] < 0.98:
+              raise SystemExit(f"research candidate loses excessive skin weight on average: {skin}")
+          if skin['minimumRetainedRawWeightRatio'] < 0.50:
+              raise SystemExit(f"research candidate has a pathological top-4 truncation outlier: {skin}")
+          # Three.js runtime skinning is four-influence. The pinned MakeHuman default rig has
+          # some vertices with >4 weights, so the deterministic candidate normalizes the top
+          # four. This is acceptable for the research/runtime proof but NOT automatically a
+          # production-replacement pass. Keep that distinction machine-readable.
+          decision = {
+              'researchCandidatePass': True,
+              'productionReplacementPass': skin['minimumRetainedRawWeightRatio'] >= 0.85,
+              'policy': {
+                  'researchMeanRetainedMinimum': 0.98,
+                  'researchWorstVertexMinimum': 0.50,
+                  'productionWorstVertexMinimum': 0.85,
+              },
+              'observed': skin,
+          }
+          Path('artifacts/makehuman-rigged-candidate/skin-evidence-boundary.json').write_text(
+              json.dumps(decision, indent=2) + '\n'
+          )
+          print('[rigged-candidate-skin-boundary]', json.dumps(decision))
+          PY
+
+      - name: Upload research candidate evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: makehuman-rigged-vrm-candidate
+          path: artifacts/makehuman-rigged-candidate/
+          if-no-files-found: error
+          retention-days: 7
