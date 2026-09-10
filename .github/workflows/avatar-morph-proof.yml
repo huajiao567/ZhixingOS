@@ -1,0 +1,78 @@
+name: Avatar structural morph proof
+
+on:
+  push:
+    branches:
+      - ai/avatar-makehuman-morph-proof-v1
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/avatar-morph-proof.yml"
+      - "scripts/build-makehuman-morph-proof.py"
+      - "scripts/audit-avatar-model.mjs"
+      - "docs/AVATAR_MODEL_REPLACEMENT_GATE.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: avatar-morph-proof-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  makehuman-proof:
+    name: P0 MakeHuman structural morph proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.2
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Self-test proof builder
+        run: python scripts/build-makehuman-morph-proof.py --self-test
+
+      - name: Build proof from pinned MakeHuman CC0 core assets
+        run: python scripts/build-makehuman-morph-proof.py --output-dir artifacts/makehuman-morph-proof
+
+      - name: Verify four real structural morph families
+        run: >
+          node scripts/audit-avatar-model.mjs
+          artifacts/makehuman-morph-proof/MakeHuman_StructuralMorphProof.glb
+          --require-families=faceContour,eye,nose,mouth
+          --max-bytes=5000000
+
+      - name: Print proof report
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("artifacts/makehuman-morph-proof/report.json").read_text())
+          print(json.dumps({
+              "proofOnly": report["proofOnly"],
+              "upstreamCommit": report["upstream"]["commit"],
+              "baseMesh": report["baseMesh"],
+              "morphs": report["morphs"],
+              "glb": report["glb"],
+          }, indent=2))
+          PY
+
+      - name: Upload structural morph proof
+        uses: actions/upload-artifact@v7
+        with:
+          name: makehuman-structural-morph-proof
+          path: artifacts/makehuman-morph-proof/
+          if-no-files-found: error
+          retention-days: 7
