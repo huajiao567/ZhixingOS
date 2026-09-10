@@ -1,0 +1,44 @@
+name: Patch mobile undo E2E
+
+on:
+  push:
+    branches:
+      - ai/avatar-makehuman-morph-proof-v1
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: Replace locator tap with verified touchscreen tap
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('e2e/mobile-functional.spec.ts')
+          text = path.read_text(encoding='utf-8')
+          old = """      const deleteRequestPromise = page.waitForRequest((request) =>\n        request.url().includes('/api/data/events/')\n        && request.method() === 'DELETE',\n      );\n      await undoButton.tap({ timeout: 4_000 });\n      const deleteRequest = await deleteRequestPromise;\n"""
+          new = """      const deleteRequestPromise = page.waitForRequest((request) =>\n        request.url().includes('/api/data/events/')\n        && request.method() === 'DELETE',\n      );\n      // Use a real coordinate-level touchscreen gesture. locator.tap() can report\n      // a false timeout after the Pressable successfully handles the touch and\n      // immediately unmounts itself; the master run 34435431275 showed exactly\n      // that sequence while the backend still received the DELETE. Verify the\n      // touch point belongs to the accessible undo control before dispatching.\n      const undoBox = await undoButton.boundingBox();\n      expect(undoBox, 'visible undo control must have a touchable bounding box').not.toBeNull();\n      const undoPoint = {\n        x: undoBox!.x + undoBox!.width / 2,\n        y: undoBox!.y + undoBox!.height / 2,\n      };\n      const undoHitLabel = await page.evaluate(({ x, y }) => {\n        const hit = document.elementFromPoint(x, y);\n        return hit?.closest('[aria-label=\\\"撤回\\\"]')?.getAttribute('aria-label') ?? null;\n      }, undoPoint);\n      expect(undoHitLabel).toBe('撤回');\n      await page.touchscreen.tap(undoPoint.x, undoPoint.y);\n      const deleteRequest = await deleteRequestPromise;\n"""
+          if old not in text:
+              raise SystemExit('expected undo tap block was not found; refusing broad rewrite')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Commit deterministic touch proof
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add e2e/mobile-functional.spec.ts
+          if git diff --cached --quiet; then
+            echo 'No patch needed.'
+            exit 0
+          fi
+          git commit -m 'test: verify undo with coordinate-level mobile touch'
+          git push origin HEAD:ai/avatar-makehuman-morph-proof-v1
