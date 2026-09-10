@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { Vector3 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin } from '@pixiv/three-vrm';
 
@@ -73,17 +74,96 @@ if (!morphDeltaProof || morphDeltaProof.changedVertices < 10 || morphDeltaProof.
   throw new Error(`runtime nose morph has no meaningful vertex delta: ${JSON.stringify(morphDeltaProof)}`);
 }
 
-// Bone motion must propagate through an actual bound skeleton without mutating the source file.
-// Three.js Object3D.rotation is an Euler and intentionally has no angleTo(); use the
-// quaternion representation for a coordinate-frame invariant angular distance instead.
+// A bone accepting a quaternion is not enough: prove that the mapped humanoid bone is actually
+// part of the bound skin and that rotating it changes evaluated skinned vertex positions.
 const leftUpperArm = vrm.humanoid.getRawBoneNode('leftUpperArm');
-const originalQuaternion = leftUpperArm.quaternion.clone();
-leftUpperArm.rotation.z += 0.05;
-leftUpperArm.updateMatrixWorld(true);
-const changedRotation = leftUpperArm.quaternion.angleTo(originalQuaternion);
-leftUpperArm.quaternion.copy(originalQuaternion);
-leftUpperArm.updateMatrixWorld(true);
-if (!(changedRotation > 0.01)) throw new Error('runtime humanoid bone did not accept a real transform');
+if (!leftUpperArm) throw new Error('runtime humanoid is missing leftUpperArm');
+
+let skinDeformationProof = null;
+vrm.scene.traverse((object) => {
+  if (skinDeformationProof || !object.isSkinnedMesh || !object.skeleton) return;
+  const boneIndex = object.skeleton.bones.indexOf(leftUpperArm);
+  if (boneIndex < 0) return;
+
+  const position = object.geometry?.attributes?.position;
+  const skinIndex = object.geometry?.attributes?.skinIndex;
+  const skinWeight = object.geometry?.attributes?.skinWeight;
+  if (!position || !skinIndex || !skinWeight || position.count !== skinIndex.count || position.count !== skinWeight.count) {
+    return;
+  }
+
+  const component = (attribute, vertexIndex, lane) => {
+    if (lane === 0) return attribute.getX(vertexIndex);
+    if (lane === 1) return attribute.getY(vertexIndex);
+    if (lane === 2) return attribute.getZ(vertexIndex);
+    return attribute.getW(vertexIndex);
+  };
+
+  const influenced = [];
+  let maxLeftUpperArmWeight = 0;
+  for (let vertexIndex = 0; vertexIndex < position.count; vertexIndex += 1) {
+    let weight = 0;
+    for (let lane = 0; lane < 4; lane += 1) {
+      if (component(skinIndex, vertexIndex, lane) === boneIndex) {
+        weight += component(skinWeight, vertexIndex, lane);
+      }
+    }
+    if (weight > 1e-6) {
+      influenced.push(vertexIndex);
+      maxLeftUpperArmWeight = Math.max(maxLeftUpperArmWeight, weight);
+    }
+  }
+  if (!influenced.length) return;
+
+  vrm.scene.updateMatrixWorld(true);
+  object.skeleton.update();
+  const before = influenced.map((vertexIndex) => {
+    const point = new Vector3().fromBufferAttribute(position, vertexIndex);
+    return object.applyBoneTransform(vertexIndex, point);
+  });
+
+  const originalQuaternion = leftUpperArm.quaternion.clone();
+  leftUpperArm.rotation.z += 0.05;
+  vrm.scene.updateMatrixWorld(true);
+  object.skeleton.update();
+
+  let movedVertexCount = 0;
+  let maxSkinnedVertexDelta = 0;
+  for (let i = 0; i < influenced.length; i += 1) {
+    const vertexIndex = influenced[i];
+    const point = new Vector3().fromBufferAttribute(position, vertexIndex);
+    object.applyBoneTransform(vertexIndex, point);
+    const delta = point.distanceTo(before[i]);
+    if (delta > 1e-8) movedVertexCount += 1;
+    maxSkinnedVertexDelta = Math.max(maxSkinnedVertexDelta, delta);
+  }
+
+  const changedRotation = leftUpperArm.quaternion.angleTo(originalQuaternion);
+  leftUpperArm.quaternion.copy(originalQuaternion);
+  vrm.scene.updateMatrixWorld(true);
+  object.skeleton.update();
+
+  skinDeformationProof = {
+    mesh: object.name,
+    bone: 'leftUpperArm',
+    boneIndex,
+    influencedVertexCount: influenced.length,
+    movedVertexCount,
+    maxLeftUpperArmWeight,
+    maxSkinnedVertexDelta,
+    rotationDeltaRadians: changedRotation,
+  };
+});
+
+if (!skinDeformationProof) {
+  throw new Error('leftUpperArm is not connected to any runtime SkinnedMesh skin');
+}
+if (!(skinDeformationProof.rotationDeltaRadians > 0.01)) {
+  throw new Error(`runtime humanoid bone did not accept a real transform: ${JSON.stringify(skinDeformationProof)}`);
+}
+if (skinDeformationProof.movedVertexCount < 10 || skinDeformationProof.maxSkinnedVertexDelta <= 1e-6) {
+  throw new Error(`runtime bone transform did not deform bound skin geometry: ${JSON.stringify(skinDeformationProof)}`);
+}
 
 console.log('[rigged-vrm-runtime-probe]', JSON.stringify({
   candidatePath,
@@ -93,5 +173,5 @@ console.log('[rigged-vrm-runtime-probe]', JSON.stringify({
   skinnedMeshes,
   runtimeTargets: [...runtimeTargets].sort(),
   morphDeltaProof,
-  leftUpperArmRotationDeltaRadians: changedRotation,
+  skinDeformationProof,
 }));
