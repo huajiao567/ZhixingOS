@@ -67,7 +67,7 @@ the pinned upstream `.target` files.
 
 ## Measured candidate
 
-Dedicated workflow run `34478432208` produced a deterministic candidate with:
+Dedicated workflow run `34494599142` produced the same deterministic candidate with:
 
 | Metric | Result |
 | --- | ---: |
@@ -95,7 +95,13 @@ Source-target affected-vertex counts remain:
 `scripts/probe-rigged-vrm-candidate.mjs` loads the generated artifact through the same installed
 `@pixiv/three-vrm` dependency family used by ZhixingOS. It is not a JSON-only check.
 
-Run `34478432208` measured:
+The probe now requires two independent geometry-level proofs. First, a structural morph must retain
+real non-zero vertex deltas at runtime. Second, a mapped humanoid bone must be present in an actual
+bound `SkinnedMesh`, influence real vertices through `skinIndex` / `skinWeight`, and moving that bone
+must change evaluated skinned vertex positions. Merely changing a Three.js bone quaternion is not
+accepted as skin-deformation evidence.
+
+Run `34494599142` measured:
 
 ```
 coreBoneCount: 17
@@ -106,6 +112,11 @@ SkinnedMesh vertices: 19158
 runtimeTargets: eye_size, face_jaw_width, mouth_width, nose_width
 runtime nose_width changed vertices (>1e-8): 378
 runtime nose_width max delta: 0.004900000058114529 m
+leftUpperArm skin bone index: 98
+leftUpperArm influenced vertices: 663
+leftUpperArm vertices moved after 0.05 rad rotation: 663
+leftUpperArm maximum normalized vertex weight: 0.796999990940094
+maximum evaluated skinned-vertex displacement: 0.008801826754893874 m
 leftUpperArm quaternion rotation accepted: 0.049999999999996846 rad
 ```
 
@@ -115,11 +126,12 @@ count and runtime significance count are intentionally reported separately.
 
 This proves that the candidate is parsed as a VRM humanoid with an actual bound `SkinnedMesh`, that
 the four structural channels survive into runtime morph dictionaries, that at least one structural
-channel contains real runtime vertex deltas, and that a mapped humanoid bone accepts a real runtime
-rotation.
+channel contains real runtime vertex deltas, and that a mapped humanoid bone actually deforms bound
+skin geometry under runtime evaluation.
 
-It does **not** prove that deformation quality is visually production-ready, anthropometrically
-correct, or personally correct.
+It does **not** prove that the deformation is visually production-ready, anatomically correct,
+anthropometrically calibrated, or personally correct. A single upper-arm deformation probe also
+does not validate every joint or pose.
 
 ## Skin-weight blocker: research pass, production fail
 
@@ -164,6 +176,8 @@ The current research candidate still has several explicit blockers:
 - there is one skin material only and no hair/outfit material or texture assets, so production
   skin/hair/outfit tint parity is not present;
 - there are no spring-bone groups or production hair/clothing dynamics;
+- only one mapped joint currently has a geometry-level deformation probe; full-pose deformation
+  quality and joint-limit behavior are not yet validated;
 - no 390×844 candidate render/frame-time/screenshot has been accepted yet;
 - no 1440×960 candidate visual regression has been accepted yet;
 - no Android native compile or Android physical-device evidence exists for this candidate;
