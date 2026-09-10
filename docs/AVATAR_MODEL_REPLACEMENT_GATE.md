@@ -138,9 +138,9 @@ Why it is a serious candidate:
 - MPFB documents a target as conceptually a blend shape / shape key that moves vertices.
   This is directly relevant to real eye/nose/mouth/jaw identity controls.
 - MPFB release `v2.0.17` is the current evaluated generator release.
-- VRM Add-on for Blender release `v4.5.0` is the current evaluated VRM exporter; the
+- VRM Add-on for Blender release `v4.7.1` (2026-09-06) is the current evaluated VRM exporter; the
   upstream project exposes import/export and Python automation and is licensed
-  `MIT OR GPL-3.0-or-later`.
+  `MIT OR GPL-3.0-or-later`. Its latest release fixes VRMA hips translation for transformed armatures.
 - VRM Add-on `v4.2.0` introduced an MPFB2 bone-mapping preset, reducing rig-mapping risk.
 
 Primary official references:
@@ -161,7 +161,7 @@ licenses and must be audited separately.
 Do not replace AvatarSample_G yet.
 
 The next candidate branch should generate one pinned, minimal MPFB-derived humanoid with only
-reviewed/core assets, export it through a pinned VRM Add-on version, then run
+reviewed/core assets, export it through pinned VRM Add-on `v4.7.1`, then run
 `scripts/audit-avatar-model.mjs` with explicit structural-family requirements before any
 runtime integration. Only after the candidate passes license, size, morph, humanoid and
 390x844 performance gates should the production renderer be pointed at it.
