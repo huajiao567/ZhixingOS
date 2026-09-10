@@ -345,7 +345,23 @@ test.describe('390x844 手机界面功能冒烟', () => {
         request.url().includes('/api/data/events/')
         && request.method() === 'DELETE',
       );
-      await undoButton.tap({ timeout: 4_000 });
+      // Use a real coordinate-level touchscreen gesture. locator.tap() can report
+      // a false timeout after the Pressable successfully handles the touch and
+      // immediately unmounts itself; the master run 34435431275 showed exactly
+      // that sequence while the backend still received the DELETE. Verify the
+      // touch point belongs to the accessible undo control before dispatching.
+      const undoBox = await undoButton.boundingBox();
+      expect(undoBox, 'visible undo control must have a touchable bounding box').not.toBeNull();
+      const undoPoint = {
+        x: undoBox!.x + undoBox!.width / 2,
+        y: undoBox!.y + undoBox!.height / 2,
+      };
+      const undoHitLabel = await page.evaluate(({ x, y }) => {
+        const hit = document.elementFromPoint(x, y);
+        return hit?.closest('[aria-label=\"撤回\"]')?.getAttribute('aria-label') ?? null;
+      }, undoPoint);
+      expect(undoHitLabel).toBe('撤回');
+      await page.touchscreen.tap(undoPoint.x, undoPoint.y);
       const deleteRequest = await deleteRequestPromise;
       expect(deleteRequest.url()).toContain('/api/data/events/j-');
       await expect(page.getByText('已撤回这条记录', { exact: true })).toBeVisible();
