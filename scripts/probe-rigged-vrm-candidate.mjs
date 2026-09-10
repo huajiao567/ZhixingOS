@@ -74,12 +74,15 @@ if (!morphDeltaProof || morphDeltaProof.changedVertices < 10 || morphDeltaProof.
 }
 
 // Bone motion must propagate through an actual bound skeleton without mutating the source file.
+// Three.js Object3D.rotation is an Euler and intentionally has no angleTo(); use the
+// quaternion representation for a coordinate-frame invariant angular distance instead.
 const leftUpperArm = vrm.humanoid.getRawBoneNode('leftUpperArm');
-const originalRotation = leftUpperArm.rotation.clone();
+const originalQuaternion = leftUpperArm.quaternion.clone();
 leftUpperArm.rotation.z += 0.05;
 leftUpperArm.updateMatrixWorld(true);
-const changedRotation = leftUpperArm.rotation.angleTo(originalRotation);
-leftUpperArm.rotation.copy(originalRotation);
+const changedRotation = leftUpperArm.quaternion.angleTo(originalQuaternion);
+leftUpperArm.quaternion.copy(originalQuaternion);
+leftUpperArm.updateMatrixWorld(true);
 if (!(changedRotation > 0.01)) throw new Error('runtime humanoid bone did not accept a real transform');
 
 console.log('[rigged-vrm-runtime-probe]', JSON.stringify({
