@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/avatar-candidate-render.yml"
       - "e2e/avatar-research-candidate.spec.ts"
+      - "docs/AVATAR_CANDIDATE_RENDER_HARNESS.md"
       - "scripts/build-makehuman-vrm-candidate.py"
       - "scripts/probe-rigged-vrm-candidate.mjs"
       - "src/mirror3d/avatar/**"
@@ -20,6 +21,7 @@ on:
     paths:
       - ".github/workflows/avatar-candidate-render.yml"
       - "e2e/avatar-research-candidate.spec.ts"
+      - "docs/AVATAR_CANDIDATE_RENDER_HARNESS.md"
       - "scripts/build-makehuman-vrm-candidate.py"
       - "scripts/probe-rigged-vrm-candidate.mjs"
       - "src/mirror3d/avatar/**"
@@ -115,6 +117,40 @@ jobs:
           WEB_BASE: http://localhost:8081
           RESEARCH_AVATAR_CANDIDATE: artifacts/makehuman-rigged-candidate/MakeHuman_Core_Rigged_Candidate.vrm
         run: npx playwright test e2e/avatar-research-candidate.spec.ts --project=${{ matrix.project }} --reporter=list
+
+      - name: Enforce research-versus-production truth boundary
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          project = '${{ matrix.project }}'
+          evidence_path = Path('artifacts/avatar-candidate-render') / project / 'render-evidence.json'
+          if not evidence_path.exists():
+              raise SystemExit(f'missing render evidence: {evidence_path}')
+
+          evidence = json.loads(evidence_path.read_text())
+          if evidence.get('renderCompatibilityPass') is not True:
+              raise SystemExit(f'research renderer compatibility did not pass: {evidence}')
+          if evidence.get('productionReplacementPass') is not False:
+              raise SystemExit('research harness must not silently promote the candidate to production')
+          if evidence.get('visualProductionGatePass') is not False:
+              raise SystemExit('untextured research candidate unexpectedly passed the visual production gate')
+          if not evidence.get('productionBlockers'):
+              raise SystemExit('production blockers must remain explicit and machine-readable')
+
+          performance = evidence.get('performancePolicy') or {}
+          print('[candidate-render-truth-boundary]', json.dumps({
+              'project': project,
+              'renderCompatibilityPass': evidence.get('renderCompatibilityPass'),
+              'productionReplacementPass': evidence.get('productionReplacementPass'),
+              'ciHostedWebPerformancePass': performance.get('ciHostedWebPerformancePass'),
+              'homeP95Ms': (evidence.get('homeFrames') or {}).get('p95Ms'),
+              'editorP95Ms': (evidence.get('editorFrames') or {}).get('p95Ms'),
+              'productionBlockers': evidence.get('productionBlockers'),
+          }, ensure_ascii=False))
+          PY
 
       - name: Upload render evidence
         if: always()
