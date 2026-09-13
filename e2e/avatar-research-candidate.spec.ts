@@ -39,6 +39,13 @@ type AvatarStageEvidence = {
   visibleHeight: number;
 };
 
+type FaceCloseupEvidence = {
+  interaction: 'real-canvas-wheel-zoom';
+  wheelSteps: number;
+  wheelDeltaY: number;
+  stage: AvatarStageEvidence;
+};
+
 async function waitForApp(page: Page) {
   await page.goto(WEB_BASE, { waitUntil: 'domcontentloaded', timeout: 90_000 });
   await page.waitForFunction(() => {
@@ -166,6 +173,28 @@ async function scrollEditorAvatarBackIntoView(page: Page) {
   await expect(heading).toBeVisible({ timeout: 10_000 });
 }
 
+async function zoomAvatarToFaceForEvidence(page: Page): Promise<Omit<FaceCloseupEvidence, 'stage'>> {
+  // Exercise the production OrbitControls exactly as a user would: move the pointer
+  // over the live WebGL canvas and wheel inward. Do not mutate camera/orbit refs,
+  // React state, DOM attributes, or debug globals from the test.
+  await scrollEditorAvatarBackIntoView(page);
+  const stage = page.locator('canvas').first();
+  const box = await stage.boundingBox();
+  if (!box) throw new Error('avatar canvas unavailable for real wheel zoom');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+  const wheelSteps = 10;
+  const wheelDeltaY = -800;
+  for (let step = 0; step < wheelSteps; step += 1) {
+    await page.mouse.wheel(0, wheelDeltaY);
+    await page.waitForTimeout(45);
+  }
+  // OrbitControls applies damping in requestAnimationFrame; allow it to converge
+  // before taking visual evidence while natural blink/look/breath remain enabled.
+  await page.waitForTimeout(800);
+  return { interaction: 'real-canvas-wheel-zoom', wheelSteps, wheelDeltaY };
+}
+
 async function clickAdjustableTrackEnd(page: Page, slider: Locator) {
   await slider.scrollIntoViewIfNeeded();
   const box = await slider.boundingBox();
@@ -226,6 +255,8 @@ test.describe('research VRM through production renderer', () => {
     const editorFrames = await sampleAnimationFrames(page);
     await scrollEditorAvatarBackIntoView(page);
     const beforeMorphAvatarStage = await captureVisibleAvatarStage(page, '02a-editor-avatar-stage-before-morph');
+    const faceFocus = await zoomAvatarToFaceForEvidence(page);
+    const beforeMorphFaceCloseup = await captureVisibleAvatarStage(page, '02b-editor-face-closeup-before-morph');
     await capture(page, '02-editor-research-candidate');
 
     // The product contract still labels these controls as stored-only for the
@@ -254,6 +285,7 @@ test.describe('research VRM through production renderer', () => {
     await capture(page, '03-editor-research-candidate-real-morph-controls');
     await scrollEditorAvatarBackIntoView(page);
     const afterMorphAvatarStage = await captureVisibleAvatarStage(page, '04-editor-avatar-stage-after-real-morph');
+    const afterMorphFaceCloseup = await captureVisibleAvatarStage(page, '04b-editor-face-closeup-after-real-morph');
     await capture(page, '05-editor-research-candidate-real-morph-avatar-visible');
 
     const candidateStructuralTargets = morphedEditorProbe.identityMorphs.availableTargetNames;
@@ -284,6 +316,8 @@ test.describe('research VRM through production renderer', () => {
       && appliedIdentityBindings.some((binding) => binding.field === 'mouthWidth' && binding.weight >= 0.95)
       && beforeMorphAvatarStage.visibleHeight > 0
       && afterMorphAvatarStage.visibleHeight > 0
+      && beforeMorphFaceCloseup.visibleHeight > 0
+      && afterMorphFaceCloseup.visibleHeight > 0
       && homeFrames.frames >= 100
       && editorFrames.frames >= 100
       && fatalRendererErrors.length === 0
@@ -331,6 +365,12 @@ test.describe('research VRM through production renderer', () => {
       visualMorphEvidence: {
         beforeMorphAvatarStage,
         afterMorphAvatarStage,
+        faceCloseup: {
+          ...faceFocus,
+          before: beforeMorphFaceCloseup,
+          after: afterMorphFaceCloseup,
+          sameLiveCanvasOrbitState: true,
+        },
         userVisibleScrollPath: 'real wheel scrolling returned the live editor avatar stage to the viewport after slider interaction',
         pixelDifferenceGate: false,
         pixelDifferenceReason: 'idle/blink/look/breath motion remains live, so a raw screenshot diff would confound structural morphs with animation',
