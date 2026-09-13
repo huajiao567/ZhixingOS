@@ -33,6 +33,12 @@ type ConsoleRow = {
   text: string;
 };
 
+type AvatarStageEvidence = {
+  file: string;
+  box: { x: number; y: number; width: number; height: number };
+  visibleHeight: number;
+};
+
 async function waitForApp(page: Page) {
   await page.goto(WEB_BASE, { waitUntil: 'domcontentloaded', timeout: 90_000 });
   await page.waitForFunction(() => {
@@ -125,6 +131,41 @@ async function capture(page: Page, name: string) {
   await page.screenshot({ path: resolve(dir, `${name}.png`), fullPage: true });
 }
 
+async function captureVisibleAvatarStage(page: Page, name: string): Promise<AvatarStageEvidence> {
+  const canvas = page.locator('canvas');
+  await expect(canvas).toHaveCount(1, { timeout: 30_000 });
+  const stage = canvas.first();
+  await expect(stage).toBeVisible({ timeout: 30_000 });
+  const box = await stage.boundingBox();
+  const viewport = page.viewportSize();
+  if (!box || !viewport) throw new Error(`avatar stage geometry unavailable: ${JSON.stringify({ box, viewport })}`);
+  const visibleHeight = Math.max(0, Math.min(viewport.height, box.y + box.height) - Math.max(0, box.y));
+  expect(box.width, 'avatar stage must have a non-trivial rendered width').toBeGreaterThan(180);
+  expect(box.height, 'avatar stage must have a non-trivial rendered height').toBeGreaterThan(180);
+  expect(visibleHeight, 'avatar stage must be materially inside the actual viewport').toBeGreaterThan(Math.min(180, box.height * 0.5));
+
+  const dir = resolve('e2e', 'candidate-screenshots', test.info().project.name);
+  mkdirSync(dir, { recursive: true });
+  const file = `${name}.png`;
+  await stage.screenshot({ path: resolve(dir, file) });
+  return { file, box, visibleHeight };
+}
+
+async function scrollEditorAvatarBackIntoView(page: Page) {
+  const heading = page.getByText('我的三维镜像', { exact: true });
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await page.mouse.wheel(0, -700);
+    await page.waitForTimeout(50);
+    const canvasBox = await page.locator('canvas').first().boundingBox();
+    const viewport = page.viewportSize();
+    if (canvasBox && viewport) {
+      const visibleHeight = Math.max(0, Math.min(viewport.height, canvasBox.y + canvasBox.height) - Math.max(0, canvasBox.y));
+      if (visibleHeight > Math.min(180, canvasBox.height * 0.5)) break;
+    }
+  }
+  await expect(heading).toBeVisible({ timeout: 10_000 });
+}
+
 async function clickAdjustableTrackEnd(page: Page, slider: Locator) {
   await slider.scrollIntoViewIfNeeded();
   const box = await slider.boundingBox();
@@ -183,6 +224,8 @@ test.describe('research VRM through production renderer', () => {
     await expect(page.getByRole('progressbar')).toHaveCount(0, { timeout: 10_000 });
     const editorReadyMs = Date.now() - editorStartedAt;
     const editorFrames = await sampleAnimationFrames(page);
+    await scrollEditorAvatarBackIntoView(page);
+    const beforeMorphAvatarStage = await captureVisibleAvatarStage(page, '02a-editor-avatar-stage-before-morph');
     await capture(page, '02-editor-research-candidate');
 
     // The product contract still labels these controls as stored-only for the
@@ -208,7 +251,10 @@ test.describe('research VRM through production renderer', () => {
       );
     }, undefined, { timeout: 30_000 });
     const morphedEditorProbe = await waitForAvatarProbe(page, 'editor_preview');
-    await capture(page, '03-editor-research-candidate-real-morph');
+    await capture(page, '03-editor-research-candidate-real-morph-controls');
+    await scrollEditorAvatarBackIntoView(page);
+    const afterMorphAvatarStage = await captureVisibleAvatarStage(page, '04-editor-avatar-stage-after-real-morph');
+    await capture(page, '05-editor-research-candidate-real-morph-avatar-visible');
 
     const candidateStructuralTargets = morphedEditorProbe.identityMorphs.availableTargetNames;
     const appliedIdentityBindings = morphedEditorProbe.identityMorphs.bindings;
@@ -236,6 +282,8 @@ test.describe('research VRM through production renderer', () => {
       && editorProbe.evidenceTypes.includes('editor_preview')
       && appliedIdentityBindings.some((binding) => binding.field === 'eyeSize' && binding.weight >= 0.95)
       && appliedIdentityBindings.some((binding) => binding.field === 'mouthWidth' && binding.weight >= 0.95)
+      && beforeMorphAvatarStage.visibleHeight > 0
+      && afterMorphAvatarStage.visibleHeight > 0
       && homeFrames.frames >= 100
       && editorFrames.frames >= 100
       && fatalRendererErrors.length === 0
@@ -279,6 +327,14 @@ test.describe('research VRM through production renderer', () => {
         },
         semanticExclusions: ['face_jaw_width != jawRoundness', 'nose_width != noseSize'],
         productionUiCapabilityUnchanged: 'stored-only for current AvatarSample_G',
+      },
+      visualMorphEvidence: {
+        beforeMorphAvatarStage,
+        afterMorphAvatarStage,
+        userVisibleScrollPath: 'real wheel scrolling returned the live editor avatar stage to the viewport after slider interaction',
+        pixelDifferenceGate: false,
+        pixelDifferenceReason: 'idle/blink/look/breath motion remains live, so a raw screenshot diff would confound structural morphs with animation',
+        authority: 'human-visible screenshot evidence paired with authoritative runtime mesh-weight proof; not a scientific, anthropometric, or personal-resemblance claim',
       },
       homeFrames,
       editorFrames,
