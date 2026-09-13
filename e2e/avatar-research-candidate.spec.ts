@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 const WEB_BASE = process.env.WEB_BASE ?? 'http://localhost:8081';
 const CANDIDATE_PATH = process.env.RESEARCH_AVATAR_CANDIDATE
   ?? resolve('artifacts', 'makehuman-rigged-candidate', 'MakeHuman_Core_Rigged_Candidate.vrm');
+const CLEAN_BODY_REPORT_PATH = process.env.RESEARCH_AVATAR_CLEAN_BODY_REPORT;
 const PROVISIONAL_WEB_FRAME_P95_MS = 1000 / 30;
 
 type AvatarRuntimeProbe = {
@@ -46,6 +47,29 @@ type FaceCloseupEvidence = {
   wheelDeltaY: number;
   stage: AvatarStageEvidence;
 };
+
+type CleanBodyReport = {
+  researchOnly?: boolean;
+  geometry?: {
+    exportedObjGroup?: string;
+    vertexCount?: number;
+    triangleCount?: number;
+  };
+  skin?: {
+    strategy?: string;
+    minimumRetainedRawWeightRatio?: number;
+    meanRetainedRawWeightRatio?: number;
+    provisionalMinimumRetainedWeightGate?: number;
+    provisionalMinimumRetainedWeightGatePass?: boolean;
+    verticesWithMoreThan4Influences?: number;
+  };
+  productionReplacementPass?: boolean;
+};
+
+function loadCleanBodyReport(): CleanBodyReport | null {
+  if (!CLEAN_BODY_REPORT_PATH) return null;
+  return JSON.parse(readFileSync(CLEAN_BODY_REPORT_PATH, 'utf8')) as CleanBodyReport;
+}
 
 async function waitForApp(page: Page) {
   await page.goto(WEB_BASE, { waitUntil: 'domcontentloaded', timeout: 90_000 });
@@ -238,7 +262,7 @@ test.describe('research VRM through production renderer', () => {
         body: candidateBytes,
         headers: {
           'cache-control': 'no-store',
-          'x-zhixing-research-avatar': 'makehuman-rigged-candidate',
+          'x-zhixing-research-avatar': 'makehuman-clean-body-runtime-candidate',
         },
       });
     });
@@ -246,6 +270,7 @@ test.describe('research VRM through production renderer', () => {
 
   test('candidate renders in MirrorHome and Mirror3DEditor at the real project viewport', async ({ page }) => {
     const candidateBytes = readFileSync(CANDIDATE_PATH);
+    const cleanBodyReport = loadCleanBodyReport();
     const browserConsole: ConsoleRow[] = [];
     page.on('console', (message) => browserConsole.push({ type: message.type(), text: message.text() }));
 
@@ -339,9 +364,16 @@ test.describe('research VRM through production renderer', () => {
       && fatalRendererErrors.length === 0
     );
 
+    const cleanSkin = cleanBodyReport?.skin;
+    const skinningGatePass = cleanBodyReport != null
+      && cleanBodyReport.geometry?.exportedObjGroup === 'body'
+      && cleanBodyReport.productionReplacementPass === false
+      && cleanSkin?.provisionalMinimumRetainedWeightGatePass === true
+      && (cleanSkin.minimumRetainedRawWeightRatio ?? 0) >= (cleanSkin.provisionalMinimumRetainedWeightGate ?? 0.85);
+
     const productionBlockers = [
-      'visual: one untextured skin material; no production hair/outfit/eye/material parity',
-      'skinning: pinned MakeHuman candidate worst retained raw top-4 weight ratio remains 0.5136330140',
+      'visual: body-only CC0 core mesh still lacks production hair/outfit/eye/material parity',
+      ...(skinningGatePass ? [] : ['skinning: research candidate has not passed the unchanged 0.85 retained raw top-4 weight gate']),
       'expressions: no production blink/expression parity',
       'gaze: VRM0 LookAtDegreeMap curves remain unsupported by the installed three-vrm runtime',
       'performance: GitHub-hosted headless/software WebGL evidence is not a mobile-GPU or physical-device acceptance environment',
@@ -356,6 +388,18 @@ test.describe('research VRM through production renderer', () => {
       modelIntercepts,
       homeReadyMs,
       editorReadyMs,
+      candidateSkinningEvidence: cleanBodyReport ? {
+        exportedObjGroup: cleanBodyReport.geometry?.exportedObjGroup,
+        vertexCount: cleanBodyReport.geometry?.vertexCount,
+        triangleCount: cleanBodyReport.geometry?.triangleCount,
+        strategy: cleanSkin?.strategy,
+        minimumRetainedRawWeightRatio: cleanSkin?.minimumRetainedRawWeightRatio,
+        meanRetainedRawWeightRatio: cleanSkin?.meanRetainedRawWeightRatio,
+        provisionalMinimumRetainedWeightGate: cleanSkin?.provisionalMinimumRetainedWeightGate,
+        provisionalMinimumRetainedWeightGatePass: skinningGatePass,
+        verticesWithMoreThan4Influences: cleanSkin?.verticesWithMoreThan4Influences,
+        authority: 'pinned-source structural export/skinning evidence only; not personal, anatomical, or visual correctness',
+      } : null,
       homeProbe: {
         instanceId: homeProbe.instanceId,
         evidenceTypes: homeProbe.evidenceTypes,
@@ -424,6 +468,7 @@ test.describe('research VRM through production renderer', () => {
     // unchanged 30-fps provisional budget remain machine-readable above.
     expect(candidateBytes.byteLength).toBeGreaterThan(1_000_000);
     expect(candidateBytes.byteLength).toBeLessThan(5_000_000);
+    if (CLEAN_BODY_REPORT_PATH) expect(skinningGatePass).toBe(true);
     expect(renderCompatibilityPass).toBe(true);
     expect(evidence.productionReplacementPass).toBe(false);
   });
