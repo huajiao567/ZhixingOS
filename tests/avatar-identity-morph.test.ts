@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 import { createDefaultAvatarProfile } from '../src/mirror3d/avatar/v2/avatarTypes';
 import {
@@ -52,4 +53,26 @@ test('profile identity values derive independent real morph weights', () => {
     eyeSize: 0.6000000000000001,
     mouthWidth: 0.30000000000000004,
   });
+});
+
+test('current production AvatarSample_G stays stored-only for audited eye/mouth identity morphs', () => {
+  const rawAudit = execFileSync(
+    process.execPath,
+    ['scripts/audit-avatar-model.mjs', 'public/avatar/AvatarSample_G.glb', '--json'],
+    { encoding: 'utf8' },
+  );
+  const audit = JSON.parse(rawAudit) as {
+    morphs: {
+      namedTargets: string[];
+      namedTargetCount: number;
+    };
+  };
+
+  // Do not let renderer capability silently outrun the user-facing truth label.
+  // If a future production asset gains one of these exact structural targets,
+  // this contract intentionally goes red until the production UI/capability
+  // wording and visual E2E are independently reviewed and updated together.
+  assert.equal(audit.morphs.namedTargets.includes('eye_size'), false);
+  assert.equal(audit.morphs.namedTargets.includes('mouth_width'), false);
+  assert.equal(audit.morphs.namedTargetCount, 0);
 });
