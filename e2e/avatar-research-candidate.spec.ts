@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -125,6 +125,17 @@ async function capture(page: Page, name: string) {
   await page.screenshot({ path: resolve(dir, `${name}.png`), fullPage: true });
 }
 
+async function clickAdjustableTrackEnd(page: Page, slider: Locator) {
+  await slider.scrollIntoViewIfNeeded();
+  const box = await slider.boundingBox();
+  if (!box || box.width < 8 || box.height < 8) {
+    throw new Error(`adjustable slider has no usable bounding box: ${JSON.stringify(box)}`);
+  }
+  // Genuine pointer input through the rendered control. Do not mutate React state,
+  // DOM values, or runtime probes directly from the test.
+  await page.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
+}
+
 test.describe('research VRM through production renderer', () => {
   let modelIntercepts = 0;
 
@@ -181,10 +192,10 @@ test.describe('research VRM through production renderer', () => {
     await page.getByRole('button', { name: '展开当前仅保存参数' }).click();
     const eyeSizeSlider = page.getByLabel(/眼睛大小，当前仅保存/);
     const mouthWidthSlider = page.getByLabel(/嘴宽，当前仅保存/);
-    await eyeSizeSlider.scrollIntoViewIfNeeded();
-    await eyeSizeSlider.press('End');
-    await mouthWidthSlider.scrollIntoViewIfNeeded();
-    await mouthWidthSlider.press('End');
+    await clickAdjustableTrackEnd(page, eyeSizeSlider);
+    await expect(page.getByLabel(/眼睛大小，当前仅保存，当前值 1\.00/)).toBeVisible({ timeout: 10_000 });
+    await clickAdjustableTrackEnd(page, mouthWidthSlider);
+    await expect(page.getByLabel(/嘴宽，当前仅保存，当前值 1\.00/)).toBeVisible({ timeout: 10_000 });
 
     await page.waitForFunction(() => {
       const root = window as typeof window & { __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe> };
