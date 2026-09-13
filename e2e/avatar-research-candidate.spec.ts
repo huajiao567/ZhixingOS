@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -14,6 +14,14 @@ type AvatarRuntimeProbe = {
   geometry: {
     headWorldScale?: { x: number; y: number; z: number };
     shoulderWorldDistance?: number;
+  };
+  identity: {
+    eyeSize: number;
+    mouthWidth: number;
+  };
+  identityMorphs: {
+    availableTargetNames: string[];
+    bindings: Array<{ field: 'eyeSize' | 'mouthWidth'; targetName: string; meshName: string; index: number; weight: number }>;
   };
   motion: {
     elapsed: number;
@@ -117,6 +125,17 @@ async function capture(page: Page, name: string) {
   await page.screenshot({ path: resolve(dir, `${name}.png`), fullPage: true });
 }
 
+async function clickAdjustableTrackEnd(page: Page, slider: Locator) {
+  await slider.scrollIntoViewIfNeeded();
+  const box = await slider.boundingBox();
+  if (!box || box.width < 8 || box.height < 8) {
+    throw new Error(`adjustable slider has no usable bounding box: ${JSON.stringify(box)}`);
+  }
+  // Genuine pointer input through the rendered control. Do not mutate React state,
+  // DOM values, or runtime probes directly from the test.
+  await page.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
+}
+
 test.describe('research VRM through production renderer', () => {
   let modelIntercepts = 0;
 
@@ -166,6 +185,37 @@ test.describe('research VRM through production renderer', () => {
     const editorFrames = await sampleAnimationFrames(page);
     await capture(page, '02-editor-research-candidate');
 
+    // The product contract still labels these controls as stored-only for the
+    // current production AvatarSample_G. In this research-only substituted
+    // candidate, exercise the same real UI controls and prove that exact,
+    // semantically compatible structural morphs reach rendered mesh weights.
+    await page.getByRole('button', { name: '展开当前仅保存参数' }).click();
+    const eyeSizeSlider = page.getByLabel(/眼睛大小，当前仅保存/);
+    const mouthWidthSlider = page.getByLabel(/嘴宽，当前仅保存/);
+    await clickAdjustableTrackEnd(page, eyeSizeSlider);
+    await expect(page.getByLabel(/眼睛大小，当前仅保存，当前值 1\.00/)).toBeVisible({ timeout: 10_000 });
+    await clickAdjustableTrackEnd(page, mouthWidthSlider);
+    await expect(page.getByLabel(/嘴宽，当前仅保存，当前值 1\.00/)).toBeVisible({ timeout: 10_000 });
+
+    await page.waitForFunction(() => {
+      const root = window as typeof window & { __avatarRuntimeProbes?: Record<string, AvatarRuntimeProbe> };
+      return Object.values(root.__avatarRuntimeProbes ?? {}).some((probe) =>
+        probe.evidenceTypes.includes('editor_preview')
+        && probe.identity.eyeSize >= 0.98
+        && probe.identity.mouthWidth >= 0.98
+        && probe.identityMorphs.bindings.some((binding) => binding.field === 'eyeSize' && binding.weight >= 0.95)
+        && probe.identityMorphs.bindings.some((binding) => binding.field === 'mouthWidth' && binding.weight >= 0.95),
+      );
+    }, undefined, { timeout: 30_000 });
+    const morphedEditorProbe = await waitForAvatarProbe(page, 'editor_preview');
+    await capture(page, '03-editor-research-candidate-real-morph');
+
+    const candidateStructuralTargets = morphedEditorProbe.identityMorphs.availableTargetNames;
+    const appliedIdentityBindings = morphedEditorProbe.identityMorphs.bindings;
+    expect(candidateStructuralTargets).toEqual(expect.arrayContaining(['face_jaw_width', 'eye_size', 'nose_width', 'mouth_width']));
+    expect(appliedIdentityBindings.map((binding) => binding.targetName).sort()).toEqual(['eye_size', 'mouth_width']);
+    expect(appliedIdentityBindings.every((binding) => binding.weight >= 0.95)).toBe(true);
+
     const consoleErrors = browserConsole.filter((row) => row.type === 'error').map((row) => row.text);
     const fatalRendererErrors = consoleErrors.filter((message) =>
       /Render error|3D 数字人加载失败|WebGL context lost/i.test(message),
@@ -184,6 +234,8 @@ test.describe('research VRM through production renderer', () => {
       modelIntercepts > 0
       && Boolean(homeProbe.geometry.headWorldScale)
       && editorProbe.evidenceTypes.includes('editor_preview')
+      && appliedIdentityBindings.some((binding) => binding.field === 'eyeSize' && binding.weight >= 0.95)
+      && appliedIdentityBindings.some((binding) => binding.field === 'mouthWidth' && binding.weight >= 0.95)
       && homeFrames.frames >= 100
       && editorFrames.frames >= 100
       && fatalRendererErrors.length === 0
@@ -217,6 +269,16 @@ test.describe('research VRM through production renderer', () => {
         evidenceTypes: editorProbe.evidenceTypes,
         headWorldScale: editorProbe.geometry.headWorldScale,
         elapsed: editorProbe.motion.elapsed,
+      },
+      structuralMorphProof: {
+        availableTargetNames: candidateStructuralTargets,
+        appliedBindings: appliedIdentityBindings,
+        researchUiValues: {
+          eyeSize: morphedEditorProbe.identity.eyeSize,
+          mouthWidth: morphedEditorProbe.identity.mouthWidth,
+        },
+        semanticExclusions: ['face_jaw_width != jawRoundness', 'nose_width != noseSize'],
+        productionUiCapabilityUnchanged: 'stored-only for current AvatarSample_G',
       },
       homeFrames,
       editorFrames,

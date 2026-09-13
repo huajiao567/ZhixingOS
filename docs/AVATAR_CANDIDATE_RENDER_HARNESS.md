@@ -32,6 +32,23 @@ After that correction, both mobile and desktop reached `MirrorHome`, loaded the 
 
 The screenshots expose an important production blocker: the current pinned research candidate is visibly a pale, untextured human silhouette. It has one skin material and does not reproduce production hair, outfit, eyes, textures, or material separation. Renderer compatibility must therefore not be confused with production visual parity.
 
+## Structural identity morph proof is model-specific
+
+The renderer now detects structural identity morph targets by exact audited names instead of assuming that any facial blendshape is a permanent identity control. The research candidate exposes `face_jaw_width`, `eye_size`, `nose_width`, and `mouth_width`, but only two currently have semantics that exactly match existing ZhixingOS identity fields:
+
+- `eye_size` → `eyeSize`;
+- `mouth_width` → `mouthWidth`.
+
+`face_jaw_width` is intentionally **not** mapped to `jawRoundness`, and `nose_width` is intentionally **not** mapped to the broader `noseSize` field. Expression/lip-sync targets such as blink, visemes, or emotion shapes are also excluded from the permanent identity bridge.
+
+The pinned candidate's structural targets are increment-only. A neutral ZhixingOS identity value of `0.5` therefore maps to morph weight `0`; values above neutral map monotonically to `0..1`; values below neutral remain `0`. The renderer does not invent unsupported negative deformation.
+
+The candidate E2E uses the real `Mirror3DEditor` controls, keeps their production-facing labels as `当前仅保存`, and uses genuine pointer interaction on the rendered sliders. It then requires the renderer runtime probe to show both the UI identity values and the actual `SkinnedMesh.morphTargetInfluences` for `eye_size` and `mouth_width`. The test never mutates React state, DOM values, or runtime-probe objects directly.
+
+The current production `AvatarSample_G.glb` is also audited independently. It contains 410 primitive morph-target bindings but exposes **zero named targets**, so the exact-name identity bridge cannot currently bind `eye_size` or `mouth_width` on the production asset. A contract test intentionally fails if those exact production capabilities appear later, forcing the UI capability wording and production visual E2E to be reviewed together instead of silently changing behavior.
+
+This proof is deliberately research-only. It does **not** mean current production `AvatarSample_G.glb` has gained eye/mouth morph capability, and it does not justify changing those production UI labels to “预览生效”. Product capability remains asset-specific and must be independently proven on the production asset before any label or behavior is promoted.
+
 ## CI-hosted frame evidence is not physical-device performance
 
 The harness samples browser animation-frame intervals because gross stalls are useful evidence, but GitHub-hosted headless Chromium/software WebGL is not an authoritative mobile-GPU performance environment.
@@ -50,7 +67,7 @@ The variation is large enough that converting these hosted-runner values into a 
 
 Each viewport produces evidence with separate decisions:
 
-- `renderCompatibilityPass`: candidate bytes actually substituted the production model request, both real renderer surfaces emitted runtime evidence, frame sampling completed, and no fatal renderer error occurred;
+- `renderCompatibilityPass`: candidate bytes actually substituted the production model request, both real renderer surfaces emitted runtime evidence, the audited `eye_size` and `mouth_width` bindings were driven through the real editor UI into real mesh morph weights, frame sampling completed, and no fatal renderer error occurred;
 - `ciHostedWebPerformancePass`: observed hosted-Chromium p95 values meet the unchanged provisional frame budget;
 - `visualProductionGatePass`: currently `false` because visual/material parity is absent;
 - `productionReplacementPass`: currently and intentionally `false`.
