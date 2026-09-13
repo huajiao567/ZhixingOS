@@ -35,12 +35,21 @@ async function waitForApp(page: Page) {
   }
 }
 
-async function loginDemo(page: Page) {
+async function loginAndOpenMirrorHome(page: Page, projectName: string) {
   await waitForApp(page);
   const loginTab = page.getByRole('tab', { name: /切换到登录/ });
   if (await loginTab.count()) await expect(loginTab).toBeVisible({ timeout: 30_000 });
   await page.getByRole('button', { name: /使用演示账号体验/ }).click();
   await page.getByRole('button', { name: '登录账号' }).click();
+
+  if (projectName === 'chromium') {
+    // Desktop deliberately lands on DesktopHub rather than the phone-first MirrorHome.
+    // Reach the same MirrorHome through the product's visible desktop sidebar so this
+    // remains a genuine 1440x960 user path rather than a navigation-store shortcut.
+    await expect(page.getByText('电脑端工作台', { exact: true })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole('button', { name: '镜像主页' }).click();
+  }
+
   await expect(page.getByRole('button', { name: '现在的我' })).toBeVisible({ timeout: 60_000 });
 }
 
@@ -103,10 +112,12 @@ async function capture(page: Page, name: string) {
 }
 
 test.describe('research VRM through production renderer', () => {
+  let modelIntercepts = 0;
+
   test.beforeEach(async ({ page }) => {
     test.setTimeout(300_000);
     const candidateBytes = readFileSync(CANDIDATE_PATH);
-    let modelIntercepts = 0;
+    modelIntercepts = 0;
 
     await page.route('**/avatar/AvatarSample_G.glb', async (route) => {
       modelIntercepts += 1;
@@ -120,12 +131,6 @@ test.describe('research VRM through production renderer', () => {
         },
       });
     });
-
-    page.on('close', () => {
-      if (modelIntercepts === 0) {
-        console.error('[candidate-render-harness] production avatar URL was never intercepted');
-      }
-    });
   });
 
   test('candidate renders in MirrorHome and Mirror3DEditor at the real project viewport', async ({ page }) => {
@@ -136,8 +141,9 @@ test.describe('research VRM through production renderer', () => {
     });
 
     const startedAt = Date.now();
-    await loginDemo(page);
+    await loginAndOpenMirrorHome(page, test.info().project.name);
     const homeProbe = await waitForAvatarProbe(page);
+    expect(modelIntercepts, 'research test must actually substitute the production AvatarSample_G request').toBeGreaterThan(0);
     await expect(page.getByRole('progressbar')).toHaveCount(0, { timeout: 10_000 });
     const homeReadyMs = Date.now() - startedAt;
     const homeFrames = await sampleAnimationFrames(page);
@@ -176,6 +182,7 @@ test.describe('research VRM through production renderer', () => {
       project: test.info().project.name,
       viewport: test.info().project.use.viewport,
       candidateBytes: candidateBytes.byteLength,
+      modelIntercepts,
       homeReadyMs,
       editorReadyMs,
       homeProbe: {
@@ -194,6 +201,7 @@ test.describe('research VRM through production renderer', () => {
       editorFrames,
       consoleErrorCount: consoleErrors.length,
       fatalRendererErrors,
+      visualProductionGate: 'FAIL: pinned candidate is one untextured skin material and visibly lacks production hair/outfit/eye/material parity',
       truthBoundary: 'research renderer compatibility only; not a production replacement or personal-correctness claim',
     };
     const outDir = resolve('artifacts', 'avatar-candidate-render', test.info().project.name);
