@@ -186,14 +186,14 @@ async function focusAvatarFaceForEvidence(page: Page): Promise<Omit<FaceCloseupE
 
   const startX = box.x + box.width / 2;
   const startY = box.y + box.height / 2;
-  const panPixels = Math.min(78, box.height * 0.22);
+  const panPixels = Math.min(32, box.height * 0.10);
   await page.mouse.move(startX, startY);
   await page.mouse.down({ button: 'right' });
   await page.mouse.move(startX, Math.min(box.y + box.height - 10, startY + panPixels), { steps: 10 });
   await page.mouse.up({ button: 'right' });
   await page.waitForTimeout(350);
 
-  const wheelSteps = 7;
+  const wheelSteps = 6;
   const wheelDeltaY = -800;
   await page.mouse.move(startX, startY);
   for (let step = 0; step < wheelSteps; step += 1) {
