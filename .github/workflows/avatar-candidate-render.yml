@@ -1,0 +1,140 @@
+name: Avatar candidate render harness
+
+on:
+  push:
+    branches:
+      - ai/avatar-candidate-render-harness-v1
+    paths:
+      - ".github/workflows/avatar-candidate-render.yml"
+      - "e2e/avatar-research-candidate.spec.ts"
+      - "scripts/build-makehuman-vrm-candidate.py"
+      - "scripts/probe-rigged-vrm-candidate.mjs"
+      - "src/mirror3d/avatar/**"
+      - "src/screens/mirror/**"
+      - "playwright.config.ts"
+      - "package.json"
+      - "package-lock.json"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/avatar-candidate-render.yml"
+      - "e2e/avatar-research-candidate.spec.ts"
+      - "scripts/build-makehuman-vrm-candidate.py"
+      - "scripts/probe-rigged-vrm-candidate.mjs"
+      - "src/mirror3d/avatar/**"
+      - "src/screens/mirror/**"
+      - "playwright.config.ts"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: avatar-candidate-render-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  render-candidate:
+    name: Research candidate / ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - mobile-chromium
+          - chromium
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix backend ci
+
+      - name: Build pinned research VRM candidate
+        run: python scripts/build-makehuman-vrm-candidate.py --output-dir artifacts/makehuman-rigged-candidate
+
+      - name: Parse candidate through installed three-vrm before UI render
+        run: node scripts/probe-rigged-vrm-candidate.mjs artifacts/makehuman-rigged-candidate/MakeHuman_Core_Rigged_Candidate.vrm
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare isolated Web environment
+        shell: bash
+        run: |
+          cp .env.example .env.local
+          cp backend/.env.example backend/.env
+          sed -i 's/^JWT_SECRET=.*/JWT_SECRET=ci-only-secret-0123456789abcdef0123456789abcdef/' backend/.env
+          sed -i 's#^CORS_ORIGIN=.*#CORS_ORIGIN=http://localhost:8081#' backend/.env
+
+      - name: Start backend and Expo Web
+        shell: bash
+        env:
+          CI: "1"
+          EXPO_PUBLIC_API_BASE: http://127.0.0.1:3001
+        run: |
+          npm --prefix backend run dev > /tmp/zhixingos-backend.log 2>&1 &
+          npx expo start --web --port 8081 > /tmp/zhixingos-web.log 2>&1 &
+
+          for i in {1..90}; do
+            if curl -fsS http://127.0.0.1:3001/health >/dev/null 2>&1 && curl -fsS http://localhost:8081 >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Candidate render services did not become ready in time."
+          echo "===== backend ====="
+          cat /tmp/zhixingos-backend.log || true
+          echo "===== expo web ====="
+          cat /tmp/zhixingos-web.log || true
+          exit 1
+
+      - name: Render candidate through production Avatar V2 path
+        env:
+          WEB_BASE: http://localhost:8081
+          RESEARCH_AVATAR_CANDIDATE: artifacts/makehuman-rigged-candidate/MakeHuman_Core_Rigged_Candidate.vrm
+        run: npx playwright test e2e/avatar-research-candidate.spec.ts --project=${{ matrix.project }} --reporter=list
+
+      - name: Upload render evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: avatar-candidate-render-${{ matrix.project }}
+          path: |
+            artifacts/avatar-candidate-render/${{ matrix.project }}/
+            e2e/candidate-screenshots/${{ matrix.project }}/
+            e2e/test-results.json
+            e2e/html-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Print service logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "===== backend ====="
+          cat /tmp/zhixingos-backend.log || true
+          echo "===== expo web ====="
+          cat /tmp/zhixingos-web.log || true
