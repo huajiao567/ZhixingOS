@@ -7,7 +7,8 @@ The source candidate intentionally uses KHR_materials_unlit and no normals; that
 useful for structural compatibility but makes facial geometry almost impossible to
 inspect in screenshots. This script computes deterministic smooth base normals plus
 morph-normal deltas from the existing CC0 geometry, removes only the unlit material
-flag, and writes a separate GLB/VRM artifact for renderer evidence.
+flag, aligns the MakeHuman forward axis to the production renderer through one scene
+wrapper, and writes a separate GLB/VRM artifact for renderer evidence.
 """
 
 from __future__ import annotations
@@ -174,6 +175,29 @@ def remove_unlit(document: dict) -> None:
         pbr["roughnessFactor"] = 0.88
 
 
+def align_forward_axis(document: dict) -> int:
+    scene_index = int(document.get("scene", 0))
+    scenes = document.get("scenes") or []
+    if scene_index < 0 or scene_index >= len(scenes):
+        raise ValueError("default scene is unavailable for facing-axis alignment")
+    scene = scenes[scene_index]
+    roots = list(scene.get("nodes") or [])
+    if not roots:
+        raise ValueError("default scene has no root nodes")
+    nodes = document.setdefault("nodes", [])
+    wrapper_index = len(nodes)
+    nodes.append({
+        "name": "ZhixingResearchFacingRoot",
+        # glTF quaternions are [x, y, z, w]. 180° around Y maps MakeHuman's
+        # front to the production VRM renderer's expected camera-facing axis.
+        "rotation": [0.0, 1.0, 0.0, 0.0],
+        "children": roots,
+        "extras": {"researchOnly": True, "yawDegrees": 180},
+    })
+    scene["nodes"] = [wrapper_index]
+    return wrapper_index
+
+
 def build_lit_derivative(source: bytes) -> tuple[bytes, dict]:
     document, binary = parse_glb(source)
     meshes = document.get("meshes") or []
@@ -218,11 +242,13 @@ def build_lit_derivative(source: bytes) -> tuple[bytes, dict]:
         })
 
     remove_unlit(document)
+    facing_root = align_forward_axis(document)
     document.setdefault("extras", {})["zhixingLitRenderDerivative"] = {
         "researchOnly": True,
         "baseNormals": "area-weighted smooth vertex normals",
         "morphNormals": "recomputed per structural target and stored as glTF normal deltas",
         "material": "standard glTF PBR; KHR_materials_unlit removed for geometry visibility",
+        "orientation": "scene roots wrapped and yawed 180 degrees for production renderer facing convention",
     }
 
     align4(binary)
@@ -241,6 +267,7 @@ def build_lit_derivative(source: bytes) -> tuple[bytes, dict]:
         "triangleCount": len(indices) // 3,
         "baseNormalCount": len(base_normals),
         "morphNormalTargets": morph_reports,
+        "facingAlignment": {"wrapperNode": facing_root, "yawDegrees": 180},
         "inputBytes": len(source),
         "inputSha256": hashlib.sha256(source).hexdigest(),
         "outputBytes": len(output),
@@ -255,6 +282,12 @@ def self_test() -> None:
     positions = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
     normals = compute_normals(positions, [0, 1, 2])
     assert all(abs(row[2] - 1.0) < 1e-9 for row in normals), normals
+    document = {"scene": 0, "scenes": [{"nodes": [0, 1]}], "nodes": [{}, {}]}
+    wrapper = align_forward_axis(document)
+    assert wrapper == 2
+    assert document["scenes"][0]["nodes"] == [2]
+    assert document["nodes"][2]["rotation"] == [0.0, 1.0, 0.0, 0.0]
+    assert document["nodes"][2]["children"] == [0, 1]
     print("[lit-render-candidate] self-test passed")
 
 
