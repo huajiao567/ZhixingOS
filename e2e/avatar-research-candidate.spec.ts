@@ -40,7 +40,8 @@ type AvatarStageEvidence = {
 };
 
 type FaceCloseupEvidence = {
-  interaction: 'real-canvas-wheel-zoom';
+  interaction: 'real-canvas-right-drag-pan-plus-wheel-zoom';
+  panPixels: number;
   wheelSteps: number;
   wheelDeltaY: number;
   stage: AvatarStageEvidence;
@@ -173,26 +174,41 @@ async function scrollEditorAvatarBackIntoView(page: Page) {
   await expect(heading).toBeVisible({ timeout: 10_000 });
 }
 
-async function zoomAvatarToFaceForEvidence(page: Page): Promise<Omit<FaceCloseupEvidence, 'stage'>> {
-  // Exercise the production OrbitControls exactly as a user would: move the pointer
-  // over the live WebGL canvas and wheel inward. Do not mutate camera/orbit refs,
-  // React state, DOM attributes, or debug globals from the test.
+async function focusAvatarFaceForEvidence(page: Page): Promise<Omit<FaceCloseupEvidence, 'stage'>> {
+  // Use only the production OrbitControls interaction surface. The right-button drag
+  // raises the orbit target from the bust composition toward the head; subsequent
+  // wheel input zooms around that user-selected target. No camera/orbit ref, React
+  // state, DOM attribute, or diagnostic global is mutated by the test.
   await scrollEditorAvatarBackIntoView(page);
   const stage = page.locator('canvas').first();
   const box = await stage.boundingBox();
-  if (!box) throw new Error('avatar canvas unavailable for real wheel zoom');
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  if (!box) throw new Error('avatar canvas unavailable for real orbit face focus');
 
-  const wheelSteps = 10;
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+  const panPixels = Math.min(78, box.height * 0.22);
+  await page.mouse.move(startX, startY);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(startX, Math.min(box.y + box.height - 10, startY + panPixels), { steps: 10 });
+  await page.mouse.up({ button: 'right' });
+  await page.waitForTimeout(350);
+
+  const wheelSteps = 7;
   const wheelDeltaY = -800;
+  await page.mouse.move(startX, startY);
   for (let step = 0; step < wheelSteps; step += 1) {
     await page.mouse.wheel(0, wheelDeltaY);
-    await page.waitForTimeout(45);
+    await page.waitForTimeout(55);
   }
   // OrbitControls applies damping in requestAnimationFrame; allow it to converge
   // before taking visual evidence while natural blink/look/breath remain enabled.
-  await page.waitForTimeout(800);
-  return { interaction: 'real-canvas-wheel-zoom', wheelSteps, wheelDeltaY };
+  await page.waitForTimeout(900);
+  return {
+    interaction: 'real-canvas-right-drag-pan-plus-wheel-zoom',
+    panPixels,
+    wheelSteps,
+    wheelDeltaY,
+  };
 }
 
 async function clickAdjustableTrackEnd(page: Page, slider: Locator) {
@@ -255,7 +271,7 @@ test.describe('research VRM through production renderer', () => {
     const editorFrames = await sampleAnimationFrames(page);
     await scrollEditorAvatarBackIntoView(page);
     const beforeMorphAvatarStage = await captureVisibleAvatarStage(page, '02a-editor-avatar-stage-before-morph');
-    const faceFocus = await zoomAvatarToFaceForEvidence(page);
+    const faceFocus = await focusAvatarFaceForEvidence(page);
     const beforeMorphFaceCloseup = await captureVisibleAvatarStage(page, '02b-editor-face-closeup-before-morph');
     await capture(page, '02-editor-research-candidate');
 
