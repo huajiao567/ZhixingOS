@@ -10,6 +10,7 @@ on:
       - "scripts/audit-makehuman-worst-vertex-groups.py"
       - "scripts/audit-makehuman-body-export.py"
       - "scripts/build-makehuman-vrm-candidate.py"
+      - "scripts/build-makehuman-body-runtime-candidate.py"
       - "src/mirror3d/avatar/v2/VRMAvatarView.tsx"
   pull_request:
     branches:
@@ -20,6 +21,7 @@ on:
       - "scripts/audit-makehuman-worst-vertex-groups.py"
       - "scripts/audit-makehuman-body-export.py"
       - "scripts/build-makehuman-vrm-candidate.py"
+      - "scripts/build-makehuman-body-runtime-candidate.py"
       - "src/mirror3d/avatar/v2/VRMAvatarView.tsx"
   workflow_dispatch:
 
@@ -56,7 +58,13 @@ jobs:
       - name: Quantify body-only export gate and morph coverage
         run: python scripts/audit-makehuman-body-export.py --output artifacts/makehuman-skinning-audit/body-export.json
 
-      - name: Enforce audit truth boundary
+      - name: Self-test clean-body builder
+        run: python scripts/build-makehuman-body-runtime-candidate.py --self-test
+
+      - name: Build clean-body runtime-equivalent research candidate
+        run: python scripts/build-makehuman-body-runtime-candidate.py --output-dir artifacts/makehuman-clean-body-candidate
+
+      - name: Enforce audit and candidate truth boundary
         shell: bash
         run: |
           python - <<'PY'
@@ -66,16 +74,15 @@ jobs:
           report = json.loads(Path('artifacts/makehuman-skinning-audit/report.json').read_text())
           groups = json.loads(Path('artifacts/makehuman-skinning-audit/worst-vertex-groups.json').read_text())
           body = json.loads(Path('artifacts/makehuman-skinning-audit/body-export.json').read_text())
+          candidate = json.loads(Path('artifacts/makehuman-clean-body-candidate/clean-body-report.json').read_text())
           expected_commit = 'a8bc2d54ff0ac92e78ff71431b1023eda42bf482'
-          for name, item in [('audit', report), ('group trace', groups), ('body export', body)]:
+          for name, item in [('audit', report), ('group trace', groups), ('body export', body), ('clean candidate', candidate)]:
               if item.get('upstream', {}).get('commit') != expected_commit:
                   raise SystemExit(f'{name} did not use the pinned MakeHuman commit')
           if report.get('upstream', {}).get('weightsLicense') != 'CC0' or body.get('upstream', {}).get('weightsLicense') != 'CC0':
               raise SystemExit('pinned weights lost the expected CC0 declaration')
           baseline = report.get('baseline') or {}
           collapsed = report.get('collapsedToHumanoidAncestors') or {}
-          if not baseline or not collapsed:
-              raise SystemExit('missing baseline/collapsed skinning evidence')
           if baseline.get('minimumRetainedRawWeightRatio', 1) >= 0.85:
               raise SystemExit('baseline unexpectedly no longer reproduces the known top-4 retention blocker')
           if groups.get('failingVertexCount') != collapsed.get('verticesBelow085'):
@@ -83,28 +90,35 @@ jobs:
           if groups.get('failingGroupHistogram') != {'helper-hair': 16}:
               raise SystemExit(f'low-retention vertex ownership changed: {groups.get("failingGroupHistogram")}')
           gate = body.get('provisionalGate') or {}
-          if gate.get('collapsedBodyPass') is not True:
-              raise SystemExit(f'body-only runtime-equivalent skinning still fails 0.85 gate: {body.get("collapsedBodyTop4")}')
-          if gate.get('allStructuralMorphsStillAffectBody') is not True:
-              raise SystemExit(f'body-only export removed a structural morph: {body.get("morphs")}')
-          if any(item.get('candidatePromotionPass') is not False for item in (report, groups, body)):
-              raise SystemExit('audit-only workflow must never promote the candidate')
-          print('[avatar-skinning-audit-boundary]', json.dumps({
-              'baseline': baseline,
-              'collapsedFullSource': collapsed,
-              'bodyGeometry': body.get('geometry'),
-              'collapsedBodyTop4': body.get('collapsedBodyTop4'),
-              'morphs': body.get('morphs'),
-              'failingGroupHistogram': groups.get('failingGroupHistogram'),
-              'candidatePromotionPass': False,
+          if gate.get('collapsedBodyPass') is not True or gate.get('allStructuralMorphsStillAffectBody') is not True:
+              raise SystemExit(f'body-only audit gate failed: {gate}')
+          geometry = candidate.get('geometry') or {}
+          skin = candidate.get('skin') or {}
+          if geometry.get('exportedObjGroup') != 'body' or geometry.get('vertexCount') != 13380 or geometry.get('triangleCount') != 26756:
+              raise SystemExit(f'clean candidate geometry differs from audited body set: {geometry}')
+          if skin.get('provisionalMinimumRetainedWeightGatePass') is not True or skin.get('minimumRetainedRawWeightRatio', 0) < 0.85:
+              raise SystemExit(f'clean candidate did not preserve the 0.85 skinning gate: {skin}')
+          if candidate.get('productionReplacementPass') is not False:
+              raise SystemExit('research candidate must never silently become production replacement')
+          if sorted(row.get('name') for row in candidate.get('morphs') or []) != ['eye_size', 'face_jaw_width', 'mouth_width', 'nose_width']:
+              raise SystemExit(f'clean candidate structural morph set changed: {candidate.get("morphs")}')
+          print('[avatar-skinning-candidate-boundary]', json.dumps({
+              'baselineMinimum': baseline.get('minimumRetainedRawWeightRatio'),
+              'fullCollapsedMinimum': collapsed.get('minimumRetainedRawWeightRatio'),
+              'cleanGeometry': geometry,
+              'cleanSkin': skin,
+              'candidate': candidate.get('candidate'),
+              'productionReplacementPass': candidate.get('productionReplacementPass'),
           }, ensure_ascii=False))
           PY
 
-      - name: Upload skinning audit
+      - name: Upload skinning audit and clean candidate
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: avatar-skinning-fidelity-audit
-          path: artifacts/makehuman-skinning-audit/
+          path: |
+            artifacts/makehuman-skinning-audit/
+            artifacts/makehuman-clean-body-candidate/
           if-no-files-found: error
           retention-days: 7
