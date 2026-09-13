@@ -33,6 +33,11 @@ import {
   deriveCompensatedHeadLocalScale,
   safeAppearanceColor,
 } from './avatarPersonalization';
+import {
+  deriveModelIdentityMorphWeights,
+  resolveModelIdentityMorphSpec,
+  type ModelIdentityMorphField,
+} from './identityMorphBridge';
 
 interface VRMAvatarViewProps {
   profile: AvatarProfileV2;
@@ -89,6 +94,16 @@ export interface AvatarRuntimeProbe {
     skin?: string;
     hair?: string;
     outfit?: string;
+  };
+  identityMorphs: {
+    availableTargetNames: string[];
+    bindings: Array<{
+      field: ModelIdentityMorphField;
+      targetName: string;
+      meshName: string;
+      index: number;
+      weight: number;
+    }>;
   };
   /**
    * Browser/runtime diagnostics for motions that have already reached the
@@ -165,6 +180,13 @@ type TintableMaterial = THREE.Material & {
   roughness?: number;
   metalness?: number;
   userData: Record<string, unknown>;
+};
+
+type IdentityMorphBinding = {
+  field: ModelIdentityMorphField;
+  targetName: string;
+  mesh: THREE.SkinnedMesh;
+  index: number;
 };
 
 
@@ -681,6 +703,8 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
     { leftUpperArm: null, rightUpperArm: null, leftLowerArm: null, rightLowerArm: null, leftShoulder: null, rightShoulder: null, spine: null, chest: null, head: null, neck: null, leftEye: null, rightEye: null }
   );
   const blendMeshesRef = useRef<THREE.SkinnedMesh[]>([]);
+  const identityMorphBindingsRef = useRef<IdentityMorphBinding[]>([]);
+  const availableMorphTargetNamesRef = useRef<string[]>([]);
   const blinkIndicesRef = useRef<{ mesh: THREE.SkinnedMesh; idx: number }[]>([]);
   const emotionIndicesRef = useRef<Map<THREE.SkinnedMesh, Map<string, number>>>(new Map());
   /** VRM实例（如果模型包含VRM扩展） */
@@ -828,6 +852,26 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
 
         const blendMeshes = findBlendShapeMeshes(scene);
         blendMeshesRef.current = blendMeshes;
+
+        // Detect structural identity morphs by exact, semantically-audited names.
+        // Never reinterpret expression/lip-sync channels as permanent identity.
+        const availableMorphTargetNames = new Set<string>();
+        identityMorphBindingsRef.current = [];
+        for (const mesh of blendMeshes) {
+          const dictionary = mesh.morphTargetDictionary ?? {};
+          for (const [targetName, index] of Object.entries(dictionary)) {
+            availableMorphTargetNames.add(targetName);
+            const spec = resolveModelIdentityMorphSpec(targetName);
+            if (!spec || !Number.isInteger(index)) continue;
+            identityMorphBindingsRef.current.push({
+              field: spec.field,
+              targetName,
+              mesh,
+              index,
+            });
+          }
+        }
+        availableMorphTargetNamesRef.current = Array.from(availableMorphTargetNames).sort();
 
         blinkIndicesRef.current = [];
         emotionIndicesRef.current.clear();
@@ -1137,6 +1181,7 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
     const state = motionRef.current;
     const pose = deriveRuntimePose(profile);
     const identityGeometry = deriveAvatarIdentityGeometry(profile);
+    const identityMorphWeights = deriveModelIdentityMorphWeights(profile);
     const ts = pose.timeScale;
 
     // 用户确认的基础体格与生活数据临时体型变化分层叠加：
@@ -1447,6 +1492,16 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
       }
     }
 
+    // Structural identity morphs are model-capability driven and are applied after
+    // VRM.update so expression/runtime updates cannot silently reset them. The
+    // current research candidate has increment-only targets, so values below the
+    // neutral midpoint remain zero rather than inventing unsupported deformation.
+    for (const binding of identityMorphBindingsRef.current) {
+      const influences = binding.mesh.morphTargetInfluences;
+      if (!influences || binding.index < 0 || binding.index >= influences.length) continue;
+      influences[binding.index] = identityMorphWeights[binding.field];
+    }
+
     // VRM.update 可能会重置标准骨骼，因此在其后应用用户已确认的身份几何。
     // 头部先抵消身体 group 的世界缩放，再叠加脸宽/脸长，保证体格与肩宽不会偷改脸。
     if (head) {
@@ -1689,6 +1744,16 @@ function GLBModel({ url, onLoaded, onError, paused, profile, triggerAcknowledge,
           shoulderWorldDistance,
         },
         appearance: appearanceProbeRef.current,
+        identityMorphs: {
+          availableTargetNames: [...availableMorphTargetNamesRef.current],
+          bindings: identityMorphBindingsRef.current.map((binding) => ({
+            field: binding.field,
+            targetName: binding.targetName,
+            meshName: binding.mesh.name,
+            index: binding.index,
+            weight: binding.mesh.morphTargetInfluences?.[binding.index] ?? 0,
+          })),
+        },
         motion: {
           elapsed: state.elapsed,
           blinkActive: state.blinkActive,
