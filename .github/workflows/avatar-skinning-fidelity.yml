@@ -1,0 +1,88 @@
+name: Avatar skinning fidelity audit
+
+on:
+  push:
+    branches:
+      - "ai/avatar-*"
+    paths:
+      - ".github/workflows/avatar-skinning-fidelity.yml"
+      - "scripts/audit-makehuman-runtime-skinning.py"
+      - "scripts/build-makehuman-vrm-candidate.py"
+      - "src/mirror3d/avatar/v2/VRMAvatarView.tsx"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/avatar-skinning-fidelity.yml"
+      - "scripts/audit-makehuman-runtime-skinning.py"
+      - "scripts/build-makehuman-vrm-candidate.py"
+      - "src/mirror3d/avatar/v2/VRMAvatarView.tsx"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: avatar-skinning-fidelity-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Pinned MakeHuman runtime skinning audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Self-test audit math
+        run: python scripts/audit-makehuman-runtime-skinning.py --self-test
+
+      - name: Audit pinned source weights
+        run: python scripts/audit-makehuman-runtime-skinning.py --output artifacts/makehuman-skinning-audit/report.json
+
+      - name: Enforce audit truth boundary
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('artifacts/makehuman-skinning-audit/report.json')
+          report = json.loads(path.read_text())
+          expected_commit = 'a8bc2d54ff0ac92e78ff71431b1023eda42bf482'
+          if report.get('upstream', {}).get('commit') != expected_commit:
+              raise SystemExit('audit did not use the pinned MakeHuman commit')
+          if report.get('upstream', {}).get('weightsLicense') != 'CC0':
+              raise SystemExit('pinned weights lost the expected CC0 declaration')
+          baseline = report.get('baseline') or {}
+          collapsed = report.get('collapsedToHumanoidAncestors') or {}
+          if not baseline or not collapsed:
+              raise SystemExit('missing baseline/collapsed skinning evidence')
+          if baseline.get('minimumRetainedRawWeightRatio', 1) >= 0.85:
+              raise SystemExit('baseline unexpectedly no longer reproduces the known top-4 retention blocker')
+          if report.get('candidatePromotionPass') is not False:
+              raise SystemExit('audit-only workflow must never promote the candidate')
+          print('[avatar-skinning-audit-boundary]', json.dumps({
+              'baseline': baseline,
+              'collapsed': collapsed,
+              'delta': report.get('delta'),
+              'changedVertexCount': (report.get('collapse') or {}).get('changedVertexCount'),
+              'changedWeightMassFraction': (report.get('collapse') or {}).get('changedWeightMassFraction'),
+              'candidatePromotionPass': report.get('candidatePromotionPass'),
+          }, ensure_ascii=False))
+          PY
+
+      - name: Upload skinning audit
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: avatar-skinning-fidelity-audit
+          path: artifacts/makehuman-skinning-audit/report.json
+          if-no-files-found: error
+          retention-days: 7
