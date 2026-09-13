@@ -3,7 +3,7 @@ name: Avatar candidate render harness
 on:
   push:
     branches:
-      - ai/avatar-candidate-render-harness-v1
+      - "ai/avatar-*"
     paths:
       - ".github/workflows/avatar-candidate-render.yml"
       - "e2e/avatar-research-candidate.spec.ts"
