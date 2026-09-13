@@ -9,6 +9,7 @@ on:
       - "e2e/avatar-research-candidate.spec.ts"
       - "docs/AVATAR_CANDIDATE_RENDER_HARNESS.md"
       - "scripts/build-makehuman-vrm-candidate.py"
+      - "scripts/prepare-makehuman-lit-render-candidate.py"
       - "scripts/probe-rigged-vrm-candidate.mjs"
       - "src/mirror3d/avatar/**"
       - "src/screens/mirror/**"
@@ -23,6 +24,7 @@ on:
       - "e2e/avatar-research-candidate.spec.ts"
       - "docs/AVATAR_CANDIDATE_RENDER_HARNESS.md"
       - "scripts/build-makehuman-vrm-candidate.py"
+      - "scripts/prepare-makehuman-lit-render-candidate.py"
       - "scripts/probe-rigged-vrm-candidate.mjs"
       - "src/mirror3d/avatar/**"
       - "src/screens/mirror/**"
@@ -75,8 +77,17 @@ jobs:
       - name: Build pinned research VRM candidate
         run: python scripts/build-makehuman-vrm-candidate.py --output-dir artifacts/makehuman-rigged-candidate
 
-      - name: Parse candidate through installed three-vrm before UI render
-        run: node scripts/probe-rigged-vrm-candidate.mjs artifacts/makehuman-rigged-candidate/MakeHuman_Core_Rigged_Candidate.vrm
+      - name: Derive lit render candidate with structural morph normals
+        shell: bash
+        run: |
+          python scripts/prepare-makehuman-lit-render-candidate.py --self-test
+          python scripts/prepare-makehuman-lit-render-candidate.py \
+            artifacts/makehuman-rigged-candidate/MakeHuman_Core_Rigged_Candidate.vrm \
+            artifacts/makehuman-rigged-candidate/MakeHuman_Core_Rigged_Lit_Render_Candidate.vrm \
+            --report artifacts/makehuman-rigged-candidate/lit-render-candidate-report.json
+
+      - name: Parse lit candidate through installed three-vrm before UI render
+        run: node scripts/probe-rigged-vrm-candidate.mjs artifacts/makehuman-rigged-candidate/MakeHuman_Core_Rigged_Lit_Render_Candidate.vrm
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
@@ -112,10 +123,10 @@ jobs:
           cat /tmp/zhixingos-web.log || true
           exit 1
 
-      - name: Render candidate through production Avatar V2 path
+      - name: Render lit candidate through production Avatar V2 path
         env:
           WEB_BASE: http://localhost:8081
-          RESEARCH_AVATAR_CANDIDATE: artifacts/makehuman-rigged-candidate/MakeHuman_Core_Rigged_Candidate.vrm
+          RESEARCH_AVATAR_CANDIDATE: artifacts/makehuman-rigged-candidate/MakeHuman_Core_Rigged_Lit_Render_Candidate.vrm
         run: npx playwright test e2e/avatar-research-candidate.spec.ts --project=${{ matrix.project }} --reporter=list
 
       - name: Enforce research-versus-production truth boundary
@@ -136,7 +147,7 @@ jobs:
           if evidence.get('productionReplacementPass') is not False:
               raise SystemExit('research harness must not silently promote the candidate to production')
           if evidence.get('visualProductionGatePass') is not False:
-              raise SystemExit('untextured research candidate unexpectedly passed the visual production gate')
+              raise SystemExit('research candidate unexpectedly passed the visual production gate')
           if not evidence.get('productionBlockers'):
               raise SystemExit('production blockers must remain explicit and machine-readable')
 
@@ -159,6 +170,7 @@ jobs:
           name: avatar-candidate-render-${{ matrix.project }}
           path: |
             artifacts/avatar-candidate-render/${{ matrix.project }}/
+            artifacts/makehuman-rigged-candidate/lit-render-candidate-report.json
             e2e/candidate-screenshots/${{ matrix.project }}/
             e2e/test-results.json
             e2e/html-report/
