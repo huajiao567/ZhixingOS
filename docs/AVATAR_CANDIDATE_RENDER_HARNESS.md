@@ -45,6 +45,8 @@ The pinned candidate's structural targets are increment-only. A neutral ZhixingO
 
 The candidate E2E uses the real `Mirror3DEditor` controls, keeps their production-facing labels as `当前仅保存`, and uses genuine pointer interaction on the rendered sliders. It then requires the renderer runtime probe to show both the UI identity values and the actual `SkinnedMesh.morphTargetInfluences` for `eye_size` and `mouth_width`. The test never mutates React state, DOM values, or runtime-probe objects directly.
 
+The current production `AvatarSample_G.glb` is also audited independently. It contains 410 primitive morph-target bindings but exposes **zero named targets**, so the exact-name identity bridge cannot currently bind `eye_size` or `mouth_width` on the production asset. A contract test intentionally fails if those exact production capabilities appear later, forcing the UI capability wording and production visual E2E to be reviewed together instead of silently changing behavior.
+
 This proof is deliberately research-only. It does **not** mean current production `AvatarSample_G.glb` has gained eye/mouth morph capability, and it does not justify changing those production UI labels to “预览生效”. Product capability remains asset-specific and must be independently proven on the production asset before any label or behavior is promoted.
 
 ## CI-hosted frame evidence is not physical-device performance
