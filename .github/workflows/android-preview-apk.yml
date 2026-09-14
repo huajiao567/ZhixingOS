@@ -3,6 +3,7 @@ name: Android preview APK
 on:
   push:
     branches:
+      - master
       - ai/android-apk-preview-v1
     paths:
       - ".github/workflows/android-preview-apk.yml"
@@ -73,8 +74,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager \
+          sdkmanager_bin="$(command -v sdkmanager || true)"
+          if [ -z "$sdkmanager_bin" ] && [ -n "${ANDROID_HOME:-}" ]; then
+            sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' -print -quit 2>/dev/null || true)"
+          fi
+          if [ -z "$sdkmanager_bin" ] && [ -n "${ANDROID_SDK_ROOT:-}" ]; then
+            sdkmanager_bin="$(find "$ANDROID_SDK_ROOT/cmdline-tools" -type f -path '*/bin/sdkmanager' -print -quit 2>/dev/null || true)"
+          fi
+          if [ -z "$sdkmanager_bin" ]; then
+            echo "sdkmanager was not found. ANDROID_HOME=${ANDROID_HOME:-unset} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}" >&2
+            exit 1
+          fi
+          echo "SDKMANAGER=$sdkmanager_bin"
+          yes | "$sdkmanager_bin" --licenses >/dev/null || true
+          "$sdkmanager_bin" \
             "platform-tools" \
             "platforms;android-36" \
             "build-tools;36.0.0" \
@@ -113,9 +126,6 @@ jobs:
           zipalign="$build_tools/zipalign"
           aapt="$build_tools/aapt"
 
-          # Expo/React Native templates normally sign local release builds with the
-          # generated debug keystore. If a future template emits an unsigned release,
-          # sign that CI preview explicitly so the artifact remains installable.
           if ! "$apksigner" verify --verbose "$apk" >/dev/null 2>&1; then
             keytool -genkeypair -noprompt \
               -keystore /tmp/zhixingos-preview.keystore \
