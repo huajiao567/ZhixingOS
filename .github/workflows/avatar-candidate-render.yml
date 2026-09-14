@@ -9,6 +9,8 @@ on:
       - "e2e/avatar-research-candidate.spec.ts"
       - "docs/AVATAR_CANDIDATE_RENDER_HARNESS.md"
       - "scripts/build-makehuman-vrm-candidate.py"
+      - "scripts/build-makehuman-body-runtime-candidate.py"
+      - "scripts/audit-makehuman-runtime-skinning.py"
       - "scripts/prepare-makehuman-lit-render-candidate.py"
       - "scripts/probe-rigged-vrm-candidate.mjs"
       - "src/mirror3d/avatar/**"
@@ -24,6 +26,8 @@ on:
       - "e2e/avatar-research-candidate.spec.ts"
       - "docs/AVATAR_CANDIDATE_RENDER_HARNESS.md"
       - "scripts/build-makehuman-vrm-candidate.py"
+      - "scripts/build-makehuman-body-runtime-candidate.py"
+      - "scripts/audit-makehuman-runtime-skinning.py"
       - "scripts/prepare-makehuman-lit-render-candidate.py"
       - "scripts/probe-rigged-vrm-candidate.mjs"
       - "src/mirror3d/avatar/**"
@@ -74,20 +78,51 @@ jobs:
           npm ci
           npm --prefix backend ci
 
-      - name: Build pinned research VRM candidate
-        run: python scripts/build-makehuman-vrm-candidate.py --output-dir artifacts/makehuman-rigged-candidate
+      - name: Build audited clean-body research VRM candidate
+        shell: bash
+        run: |
+          python scripts/build-makehuman-body-runtime-candidate.py --self-test
+          python scripts/build-makehuman-body-runtime-candidate.py --output-dir artifacts/makehuman-clean-body-candidate
+
+      - name: Enforce clean-body skinning gate before renderer work
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path('artifacts/makehuman-clean-body-candidate/clean-body-report.json').read_text())
+          geometry = report.get('geometry') or {}
+          skin = report.get('skin') or {}
+          if geometry.get('exportedObjGroup') != 'body':
+              raise SystemExit(f'candidate is not body-only: {geometry}')
+          if geometry.get('vertexCount') != 13380 or geometry.get('triangleCount') != 26756:
+              raise SystemExit(f'candidate geometry no longer matches pinned body audit: {geometry}')
+          if skin.get('provisionalMinimumRetainedWeightGatePass') is not True:
+              raise SystemExit(f'candidate failed unchanged 0.85 retained-weight gate: {skin}')
+          if skin.get('minimumRetainedRawWeightRatio', 0) < 0.85:
+              raise SystemExit(f'candidate minimum retained weight fell below 0.85: {skin}')
+          if report.get('productionReplacementPass') is not False:
+              raise SystemExit('clean-body research candidate must not become a production replacement')
+          print('[clean-body-pre-render-gate]', json.dumps({
+              'geometry': geometry,
+              'skin': skin,
+              'candidate': report.get('candidate'),
+              'productionReplacementPass': report.get('productionReplacementPass'),
+          }, ensure_ascii=False))
+          PY
 
       - name: Derive lit render candidate with structural morph normals
         shell: bash
         run: |
           python scripts/prepare-makehuman-lit-render-candidate.py --self-test
           python scripts/prepare-makehuman-lit-render-candidate.py \
-            artifacts/makehuman-rigged-candidate/MakeHuman_Core_Rigged_Candidate.vrm \
-            artifacts/makehuman-rigged-candidate/MakeHuman_Core_Rigged_Lit_Render_Candidate.vrm \
-            --report artifacts/makehuman-rigged-candidate/lit-render-candidate-report.json
+            artifacts/makehuman-clean-body-candidate/MakeHuman_Core_Body_RuntimeSkinning_Candidate.vrm \
+            artifacts/makehuman-clean-body-candidate/MakeHuman_Core_Body_RuntimeSkinning_Lit_Render_Candidate.vrm \
+            --report artifacts/makehuman-clean-body-candidate/lit-render-candidate-report.json
 
       - name: Parse lit candidate through installed three-vrm before UI render
-        run: node scripts/probe-rigged-vrm-candidate.mjs artifacts/makehuman-rigged-candidate/MakeHuman_Core_Rigged_Lit_Render_Candidate.vrm
+        run: node scripts/probe-rigged-vrm-candidate.mjs artifacts/makehuman-clean-body-candidate/MakeHuman_Core_Body_RuntimeSkinning_Lit_Render_Candidate.vrm
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
@@ -123,10 +158,11 @@ jobs:
           cat /tmp/zhixingos-web.log || true
           exit 1
 
-      - name: Render lit candidate through production Avatar V2 path
+      - name: Render clean-body candidate through production Avatar V2 path
         env:
           WEB_BASE: http://localhost:8081
-          RESEARCH_AVATAR_CANDIDATE: artifacts/makehuman-rigged-candidate/MakeHuman_Core_Rigged_Lit_Render_Candidate.vrm
+          RESEARCH_AVATAR_CANDIDATE: artifacts/makehuman-clean-body-candidate/MakeHuman_Core_Body_RuntimeSkinning_Lit_Render_Candidate.vrm
+          RESEARCH_AVATAR_CLEAN_BODY_REPORT: artifacts/makehuman-clean-body-candidate/clean-body-report.json
         run: npx playwright test e2e/avatar-research-candidate.spec.ts --project=${{ matrix.project }} --reporter=list
 
       - name: Enforce research-versus-production truth boundary
@@ -142,19 +178,27 @@ jobs:
               raise SystemExit(f'missing render evidence: {evidence_path}')
 
           evidence = json.loads(evidence_path.read_text())
+          skin = evidence.get('candidateSkinningEvidence') or {}
           if evidence.get('renderCompatibilityPass') is not True:
               raise SystemExit(f'research renderer compatibility did not pass: {evidence}')
+          if skin.get('exportedObjGroup') != 'body' or skin.get('provisionalMinimumRetainedWeightGatePass') is not True:
+              raise SystemExit(f'render evidence lost audited clean-body skinning evidence: {skin}')
+          if skin.get('minimumRetainedRawWeightRatio', 0) < 0.85:
+              raise SystemExit(f'rendered candidate fell below unchanged 0.85 skinning gate: {skin}')
           if evidence.get('productionReplacementPass') is not False:
               raise SystemExit('research harness must not silently promote the candidate to production')
           if evidence.get('visualProductionGatePass') is not False:
               raise SystemExit('research candidate unexpectedly passed the visual production gate')
           if not evidence.get('productionBlockers'):
               raise SystemExit('production blockers must remain explicit and machine-readable')
+          if any('0.5136330140' in blocker for blocker in evidence.get('productionBlockers') or []):
+              raise SystemExit('renderer evidence still reports the obsolete pre-clean-body skinning blocker')
 
           performance = evidence.get('performancePolicy') or {}
           print('[candidate-render-truth-boundary]', json.dumps({
               'project': project,
               'renderCompatibilityPass': evidence.get('renderCompatibilityPass'),
+              'candidateSkinningEvidence': skin,
               'productionReplacementPass': evidence.get('productionReplacementPass'),
               'ciHostedWebPerformancePass': performance.get('ciHostedWebPerformancePass'),
               'homeP95Ms': (evidence.get('homeFrames') or {}).get('p95Ms'),
@@ -170,7 +214,8 @@ jobs:
           name: avatar-candidate-render-${{ matrix.project }}
           path: |
             artifacts/avatar-candidate-render/${{ matrix.project }}/
-            artifacts/makehuman-rigged-candidate/lit-render-candidate-report.json
+            artifacts/makehuman-clean-body-candidate/clean-body-report.json
+            artifacts/makehuman-clean-body-candidate/lit-render-candidate-report.json
             e2e/candidate-screenshots/${{ matrix.project }}/
             e2e/test-results.json
             e2e/html-report/
