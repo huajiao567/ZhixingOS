@@ -49,12 +49,12 @@ jobs:
   android-native-smoke:
     name: Android emulator 390x844 local-only smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 60
     env:
       CI: "1"
       NODE_ENV: production
       AVD_NAME: zhixingos-ci
-      SYSTEM_IMAGE: system-images;android-35;google_apis;x86_64
+      SYSTEM_IMAGE: system-images;android-35;default;x86_64
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -120,7 +120,7 @@ jobs:
           grep -F 'android:usesCleartextTraffic="false"' "$manifest"
           chmod +x android/gradlew
           cd android
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+          ./gradlew :app:assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --stacktrace
           ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --no-daemon > ../artifacts/android-native/release-runtime-dependencies.txt
           cd ..
           if grep -Eqi 'com\.google\.mlkit|com\.google\.firebase|firebase-installations|firebase-config' artifacts/android-native/release-runtime-dependencies.txt; then
@@ -135,6 +135,8 @@ jobs:
           {
             echo "forbiddenNativeVisionDependencies=none"
             echo "automaticNativePhotoFitting=disabled"
+            echo "smokeAbi=x86_64"
+            echo "emulatorSystemImage=aosp-default"
           } > artifacts/android-native/privacy-audit.txt
 
       - name: Boot Android emulator
@@ -243,6 +245,7 @@ jobs:
             echo "llmRequestObserved=false"
             echo "unexpectedBlockedRequestObserved=false"
             echo "emulator=true"
+            echo "emulatorSystemImage=aosp-default"
             echo "physicalDeviceValidated=false"
             echo "productionSigning=false"
           } > artifacts/android-native/metadata.txt
