@@ -149,8 +149,18 @@ jobs:
             echo "/dev/kvm is unavailable; hosted-runner native emulator acceptance cannot run." >&2
             exit 1
           fi
-          echo "no" | avdmanager create avd --force --name "$AVD_NAME" --package "$SYSTEM_IMAGE" --device "pixel_6"
-          emulator "@$AVD_NAME" \
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          avdmanager_bin="$(command -v avdmanager)"
+          emulator_bin="$(command -v emulator)"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME"
+          echo "AVDMANAGER=$avdmanager_bin"
+          echo "EMULATOR=$emulator_bin"
+          echo "no" | "$avdmanager_bin" create avd --force --name "$AVD_NAME" --package "$SYSTEM_IMAGE" --device "pixel_6"
+          echo "AVDs after creation:"
+          "$emulator_bin" -list-avds
+          find "$ANDROID_AVD_HOME" -maxdepth 2 -type f -print | sort
+          "$emulator_bin" "@$AVD_NAME" \
             -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \
             -gpu swiftshader_indirect -accel auto \
             > /tmp/zhixingos-emulator.log 2>&1 &
