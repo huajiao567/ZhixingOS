@@ -4,9 +4,11 @@ Starting with Android preview 1.0.1, the native application uses a fail-closed l
 
 ## What remains on the device
 
-The native REST-shaped application contract is resolved by an on-device AsyncStorage-backed data service instead of the ZhixingOS Express backend. Records, commitments, hypotheses, experiments, projects, skills, evidence, corrections, service-contract settings, continuity handoffs and action receipts are persisted locally. The six-position state derivation runs in TypeScript on the device. Avatar V2, photo-fitting math, intent parsing, change-path evaluation, action planning and the native vision module also execute locally.
+The native REST-shaped application contract is resolved by an on-device AsyncStorage-backed data service instead of the ZhixingOS Express backend. Records, commitments, hypotheses, experiments, projects, skills, evidence, corrections, service-contract settings, continuity handoffs and action receipts are persisted locally. The six-position state derivation runs in TypeScript on the device. Avatar V2, intent parsing, change-path evaluation, action planning and the fitting mathematics also execute locally.
 
 Avatar profiles and twin profiles continue to use their existing user-scoped on-device stores. Media capture remains file/local-URI based; the native runtime does not automatically upload photos, audio, the avatar model, precise location or the local database.
+
+Android automatic face/body photo fitting is intentionally disabled in this strict-local build. The previous Google ML Kit dependency was removed because its SDK diagnostics/usage telemetry conflicts with the rule that native application egress is limited to an explicitly configured LLM API. Manual avatar adjustment remains available. Automatic fitting can return only after a separately audited, fully offline and telemetry-free detector is integrated.
 
 Android backup is disabled (`android:allowBackup=false`) and cleartext HTTP is disabled for the preview package.
 
@@ -18,6 +20,12 @@ The LLM API key is stored in `expo-secure-store`, not AsyncStorage. The current 
 
 If no model API is enabled or no key is present, secretary chat falls back to local rule-based handling without network access. A conservative local high-risk gate runs before the LLM request and can keep high-risk text from being transmitted.
 
+## Verification contract
+
+The Android release-preview workflow audits the generated release runtime classpath and fails if Google ML Kit or Firebase libraries are present. The backend-free Android emulator lane also requires the native network boundary installation marker in logcat, rejects any LLM_ALLOW event when no LLM endpoint is configured, rejects legacy backend endpoints in runtime logs, and captures screenshots plus runtime diagnostics.
+
+These checks verify the shipped dependency graph and the application-level network policy exercised by the smoke scenario. They are not equivalent to packet capture across every OEM component or a physical-device privacy certification.
+
 ## Compatibility boundary
 
 The Web/desktop application keeps the existing backend architecture for browser development and cross-platform E2E coverage. “Native local-only” therefore describes the Android/iOS runtime, not the Web build.
@@ -26,4 +34,4 @@ The Android emulator smoke lane must run without starting the backend and record
 
 ## Remaining limits
 
-This preview does not yet establish Android physical-device GPU/performance acceptance, OEM behavior, iOS native build acceptance, production signing, or store distribution readiness. External operating-system integrations such as calendar access still use the platform APIs after user permission; they are not ZhixingOS server uploads.
+This preview does not yet establish Android physical-device GPU/performance acceptance, OEM behavior, iOS native build acceptance, production signing, store distribution readiness or packet-level proof on representative devices. External operating-system integrations such as calendar access still use platform APIs after user permission; they are not ZhixingOS server uploads.
