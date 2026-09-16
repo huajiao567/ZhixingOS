@@ -8,6 +8,7 @@ on:
     paths:
       - ".github/workflows/android-native-smoke.yml"
       - "scripts/android-native-smoke.py"
+      - "tests/native-local-privacy.test.ts"
       - "app.json"
       - "package.json"
       - "package-lock.json"
@@ -24,6 +25,7 @@ on:
     paths:
       - ".github/workflows/android-native-smoke.yml"
       - "scripts/android-native-smoke.py"
+      - "tests/native-local-privacy.test.ts"
       - "app.json"
       - "package.json"
       - "package-lock.json"
@@ -180,7 +182,6 @@ jobs:
           python3 scripts/android-native-smoke.py tap "登录账号" --timeout 30
           python3 scripts/android-native-smoke.py wait "现在的我" --timeout 120
 
-          # Give the bundled production VRM time to mount and settle in software GL.
           sleep 20
           python3 scripts/android-native-smoke.py assert-absent "原生 3D 数字人加载失败"
           python3 scripts/android-native-smoke.py dump
