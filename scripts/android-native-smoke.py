@@ -80,27 +80,8 @@ def center(bounds: str) -> tuple[int, int]:
     return (x1 + x2) // 2, (y1 + y2) // 2
 
 
-def focused_edit_text_present() -> bool:
-    root = dump()
-    return any(
-        node.attrib.get("class") == "android.widget.EditText"
-        and node.attrib.get("focused") == "true"
-        for node in root.iter("node")
-    )
-
-
 def tap(needle: str, timeout: float) -> None:
     node = wait_for(needle, timeout)
-    # UIAutomator can expose application nodes that are physically covered by the
-    # soft keyboard. A raw coordinate tap would then hit an IME key instead of the
-    # labelled control (the persistence smoke previously appended an extra "n" to
-    # the note this way). If a text field still owns focus, dismiss the IME first,
-    # re-dump the hierarchy, and only then tap the control at its current bounds.
-    if node.attrib.get("class") != "android.widget.EditText" and focused_edit_text_present():
-        run("shell", "input", "keyevent", "KEYCODE_BACK")
-        time.sleep(0.75)
-        node = wait_for(needle, timeout)
-        print(f"Dismissed focused Android IME before tapping {needle!r}")
     x, y = center(node.attrib.get("bounds", ""))
     run("shell", "input", "tap", str(x), str(y))
     print(f"Tapped {needle!r} at ({x}, {y})")
@@ -119,6 +100,25 @@ def input_text(needle: str, text: str, timeout: float) -> None:
     encoded = text.replace(" ", "%s")
     run("shell", "input", "text", encoded)
     print(f"Entered {text!r} into {needle!r} at ({x}, {y})")
+
+
+def submit_text(needle: str, timeout: float) -> None:
+    node = wait_for(needle, timeout)
+    if node.attrib.get("class") != "android.widget.EditText":
+        raise SystemExit(f"Expected {needle!r} to resolve to an Android EditText")
+    if node.attrib.get("focused") != "true":
+        x, y = center(node.attrib.get("bounds", ""))
+        run("shell", "input", "tap", str(x), str(y))
+        time.sleep(0.25)
+        node = wait_for(needle, timeout)
+        if node.attrib.get("focused") != "true":
+            raise SystemExit(f"Android text field {needle!r} did not gain focus before submit")
+    # The product TextInput is single-line, returnKeyType="send", and wires
+    # onSubmitEditing to the same save handler as the visible send button. Driving
+    # KEYCODE_ENTER therefore exercises the real Android IME submit path without
+    # coordinate-tapping a control hidden behind the software keyboard.
+    run("shell", "input", "keyevent", "KEYCODE_ENTER")
+    print(f"Submitted focused Android text field {needle!r} through the IME send/enter action")
 
 
 def assert_absent(needle: str) -> None:
@@ -145,6 +145,10 @@ def main() -> None:
     input_p.add_argument("text")
     input_p.add_argument("--timeout", type=float, default=60)
 
+    submit_p = sub.add_parser("submit-text")
+    submit_p.add_argument("needle")
+    submit_p.add_argument("--timeout", type=float, default=60)
+
     absent_p = sub.add_parser("assert-absent")
     absent_p.add_argument("needle")
 
@@ -158,6 +162,8 @@ def main() -> None:
         tap(args.needle, args.timeout)
     elif args.command == "input-text":
         input_text(args.needle, args.text, args.timeout)
+    elif args.command == "submit-text":
+        submit_text(args.needle, args.timeout)
     elif args.command == "assert-absent":
         assert_absent(args.needle)
     elif args.command == "dump":
