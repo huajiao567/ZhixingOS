@@ -102,6 +102,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p artifacts/android-native
           npx expo prebuild --platform android --clean --no-install
           manifest=android/app/src/main/AndroidManifest.xml
           test -f "$manifest"
@@ -110,6 +111,21 @@ jobs:
           chmod +x android/gradlew
           cd android
           ./gradlew :app:assembleRelease --no-daemon --stacktrace
+          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --no-daemon > ../artifacts/android-native/release-runtime-dependencies.txt
+          cd ..
+          if grep -Eqi 'com\.google\.mlkit|com\.google\.firebase|firebase-installations|firebase-config' artifacts/android-native/release-runtime-dependencies.txt; then
+            echo "Strict-local native smoke contains a forbidden ML Kit/Firebase runtime dependency." >&2
+            grep -Ei 'com\.google\.mlkit|com\.google\.firebase|firebase-installations|firebase-config' artifacts/android-native/release-runtime-dependencies.txt || true
+            exit 1
+          fi
+          if grep -R -En 'com\.google\.mlkit|com\.google\.firebase' modules/zhixing-vision/android src/mirror3d/avatar/photoFitting.ts; then
+            echo "Strict-local native source still references a forbidden native telemetry SDK." >&2
+            exit 1
+          fi
+          {
+            echo "forbiddenNativeVisionDependencies=none"
+            echo "automaticNativePhotoFitting=disabled"
+          } > artifacts/android-native/privacy-audit.txt
 
       - name: Boot Android emulator
         shell: bash
@@ -172,9 +188,23 @@ jobs:
           cp artifacts/android-native/window.xml artifacts/android-native/02-mirror-home-window.xml
           adb logcat -d -v threadtime > artifacts/android-native/logcat.txt
           adb shell dumpsys gfxinfo com.zhixingos.satori > artifacts/android-native/gfxinfo.txt || true
+          app_uid="$(adb shell dumpsys package com.zhixingos.satori | sed -n 's/.*userId=\([0-9][0-9]*\).*/\1/p' | head -n 1 | tr -d '\r')"
+          printf 'uid=%s\n' "$app_uid" > artifacts/android-native/network-audit.txt
+          if [ -n "$app_uid" ]; then
+            adb shell dumpsys netstats detail | grep -E "uid=${app_uid}([^0-9]|$)" >> artifacts/android-native/network-audit.txt || true
+          fi
 
           test -s artifacts/android-native/01-auth-native-local.png
           test -s artifacts/android-native/02-mirror-home-native-local.png
+          grep -F "[NativeNetworkBoundary] strict-local installed; only configured HTTPS LLM origin may egress" artifacts/android-native/logcat.txt
+          if grep -F "[NativeNetworkBoundary] LLM_ALLOW" artifacts/android-native/logcat.txt; then
+            echo "Native smoke performed an LLM network request without an explicitly configured endpoint." >&2
+            exit 1
+          fi
+          if grep -F "[NativeNetworkBoundary] BLOCKED" artifacts/android-native/logcat.txt; then
+            echo "Native smoke attempted an unexpected non-LLM network request." >&2
+            exit 1
+          fi
           if grep -F "[Avatar/Native] 3D render failed" artifacts/android-native/logcat.txt; then
             echo "Native Avatar V2 emitted a fatal 3D renderer error." >&2
             exit 1
@@ -187,6 +217,10 @@ jobs:
             echo "Native local-only smoke observed a legacy backend endpoint in runtime logs." >&2
             exit 1
           fi
+          if grep -Ei "mlkit|firebaseinstallations|firebase-config|storage\.googleapis\.com/mediapipe|cdn\.jsdelivr\.net/npm/@mediapipe" artifacts/android-native/logcat.txt; then
+            echo "Native strict-local smoke observed a forbidden vision/telemetry runtime signature." >&2
+            exit 1
+          fi
           {
             echo "commit=${GITHUB_SHA}"
             echo "viewport=390x844"
@@ -194,6 +228,11 @@ jobs:
             echo "backend=none"
             echo "personalDataRuntime=device-local"
             echo "externalNetworkBoundary=explicit-https-llm-api-only"
+            echo "automaticNativePhotoFitting=disabled"
+            echo "forbiddenNativeVisionDependencies=none"
+            echo "networkBoundaryInstalled=true"
+            echo "llmRequestObserved=false"
+            echo "unexpectedBlockedRequestObserved=false"
             echo "emulator=true"
             echo "physicalDeviceValidated=false"
             echo "productionSigning=false"
