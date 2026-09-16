@@ -7,12 +7,14 @@
 import React, { Component, Suspense, useEffect, useState, type ErrorInfo, type ReactNode } from 'react';
 import { AppState, Pressable, Text, View } from 'react-native';
 import { Canvas } from '@react-three/fiber/native';
+import { Asset } from 'expo-asset';
 import type { AvatarProfileV2 } from './avatarTypes';
 import { VRMAvatarView, subscribeAvatarLoad, type AvatarLoadState } from './VRMAvatarView';
 import { useAppTheme } from '../../../theme/theme';
 
-// 静态 require 让 Metro 将真实 VRM/GLB 写入 release APK；原生 R3F 会把资源复制到缓存后交给 GLTFLoader。
-const BUNDLED_VRM = require('../../../../public/avatar/AvatarSample_G.glb') as number;
+// Metro 的静态 require 在原生 release bundle 中返回数字 module id，而不是可 fetch 的 URL。
+// 必须先交给 expo-asset 把 APK 内的真实 VRM/GLB 解析/复制到本地缓存，再把带协议的 URI 交给 GLTF loader。
+const BUNDLED_VRM_MODULE = require('../../../../public/avatar/AvatarSample_G.glb') as number;
 
 export interface AvatarModelViewProps {
   profile: AvatarProfileV2;
@@ -63,8 +65,9 @@ function NativeStage({
   onAvatarPress,
   triggerAcknowledge,
   triggerTouchReaction,
+  modelUrl,
   onError,
-}: Omit<AvatarModelViewProps, 'height' | 'fallback'> & { onError: (error: Error) => void }) {
+}: Omit<AvatarModelViewProps, 'height' | 'fallback'> & { modelUrl: string; onError: (error: Error) => void }) {
   const theme = useAppTheme();
   return (
     <Canvas
@@ -82,7 +85,7 @@ function NativeStage({
       <Suspense fallback={null}>
         <VRMAvatarView
           profile={profile}
-          modelUrl={BUNDLED_VRM as unknown as string}
+          modelUrl={modelUrl}
           paused={paused}
           framing="bust"
           onAvatarPress={onAvatarPress}
@@ -107,6 +110,7 @@ export function AvatarModelView({
   const [error, setError] = useState<Error | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const [loadState, setLoadState] = useState<AvatarLoadState>({ phase: 'idle' });
+  const [modelUrl, setModelUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => setAppActive(state === 'active'));
@@ -114,6 +118,32 @@ export function AvatarModelView({
   }, []);
 
   useEffect(() => subscribeAvatarLoad(setLoadState), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setModelUrl(null);
+    const resolveBundledModel = async () => {
+      try {
+        const asset = Asset.fromModule(BUNDLED_VRM_MODULE);
+        const downloaded = await asset.downloadAsync();
+        const uri = downloaded.localUri ?? downloaded.uri;
+        if (!uri || !/^[a-z][a-z0-9+.-]*:/i.test(uri)) {
+          throw new Error('Bundled avatar asset did not resolve to a fetchable local URI.');
+        }
+        if (cancelled) return;
+        const scheme = uri.slice(0, uri.indexOf(':')).toLowerCase();
+        console.log('[Avatar/Native] bundled VRM asset ready', scheme);
+        setModelUrl(uri);
+      } catch (reason) {
+        if (cancelled) return;
+        const nextError = reason instanceof Error ? reason : new Error(String(reason));
+        console.error('[Avatar/Native] bundled VRM asset resolution failed', nextError);
+        setError(nextError);
+      }
+    };
+    void resolveBundledModel();
+    return () => { cancelled = true; };
+  }, [retryKey]);
 
   if (error) {
     return (
@@ -135,17 +165,22 @@ export function AvatarModelView({
   return (
     <Native3DErrorBoundary key={retryKey} onError={setError}>
       <View style={{ flex: 1, width: '100%', height: '100%', backgroundColor: theme.colors.bg }}>
-        <Suspense fallback={<Loading3D loadState={loadState} />}>
-          <NativeStage
-            profile={profile}
-            paused={paused || !appActive}
-            onAvatarPress={onAvatarPress}
-            triggerAcknowledge={triggerAcknowledge}
-            triggerTouchReaction={triggerTouchReaction}
-            onError={setError}
-          />
-        </Suspense>
-        {loadState.phase !== 'ready' && loadState.phase !== 'model-mounted' && loadState.phase !== 'error' && (
+        {modelUrl ? (
+          <Suspense fallback={<Loading3D loadState={loadState} />}>
+            <NativeStage
+              profile={profile}
+              paused={paused || !appActive}
+              onAvatarPress={onAvatarPress}
+              triggerAcknowledge={triggerAcknowledge}
+              triggerTouchReaction={triggerTouchReaction}
+              modelUrl={modelUrl}
+              onError={setError}
+            />
+          </Suspense>
+        ) : (
+          <Loading3D loadState={loadState} />
+        )}
+        {modelUrl && loadState.phase !== 'ready' && loadState.phase !== 'model-mounted' && loadState.phase !== 'error' && (
           <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, pointerEvents: 'none' }}>
             <Loading3D loadState={loadState} />
           </View>
