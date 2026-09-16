@@ -213,9 +213,7 @@ jobs:
 
           note="NativeSmokeNote20260916"
           python3 scripts/android-native-smoke.py input-text "快速记录" "$note" --timeout 30
-          python3 scripts/android-native-smoke.py wait "发送" --timeout 15
-          python3 scripts/android-native-smoke.py tap "发送" --timeout 15
-          adb shell input keyevent KEYCODE_BACK || true
+          python3 scripts/android-native-smoke.py submit-text "快速记录" --timeout 15
           python3 scripts/android-native-smoke.py wait "已收进今天" --timeout 20
           python3 scripts/android-native-smoke.py wait "$note" --timeout 20
           python3 scripts/android-native-smoke.py dump
