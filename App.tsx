@@ -6,8 +6,14 @@ import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { AuthProvider } from './src/services/auth';
+import { installNativeLocalNetworkBoundary } from './src/services/nativeNetworkBoundary';
 import { useAppTheme, initTheme } from './src/theme/theme';
 import { MotiView } from 'moti';
+
+// Must run before AuthProvider starts reading the API surface. On Android/iOS this
+// converts the legacy REST contract into an on-device store and blocks every
+// outbound request except the explicitly configured LLM API.
+installNativeLocalNetworkBoundary();
 
 function ThemedApp() {
   const theme = useAppTheme();
