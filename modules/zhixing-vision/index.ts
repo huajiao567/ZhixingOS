@@ -20,16 +20,21 @@ interface ZhixingVisionNativeModule {
 
 const nativeModule = requireOptionalNativeModule<ZhixingVisionNativeModule>('ZhixingVision');
 
+/**
+ * Strict-local builds intentionally disable native automatic photo fitting.
+ * The module can still be linked as a compatibility stub, so module presence
+ * must not be interpreted as capability availability.
+ */
 export function hasNativePhotoFitting(): boolean {
-  return nativeModule !== null;
+  return false;
 }
 
 export async function detectNativeFaceLandmarks(imageUri: string): Promise<NativeVisionResult | null> {
-  if (!nativeModule) throw new Error('当前安装包未包含端侧人脸拟合模块，请安装最新完整 APK');
+  if (!nativeModule) throw new Error('当前安装包未包含端侧人脸拟合模块');
   return nativeModule.detectFaceLandmarks(imageUri);
 }
 
 export async function detectNativePoseLandmarks(imageUri: string): Promise<NativeVisionResult | null> {
-  if (!nativeModule) throw new Error('当前安装包未包含端侧体格拟合模块，请安装最新完整 APK');
+  if (!nativeModule) throw new Error('当前安装包未包含端侧体格拟合模块');
   return nativeModule.detectPoseLandmarks(imageUri);
 }
