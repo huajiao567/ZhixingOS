@@ -25,7 +25,9 @@
 
 The application exposes media only after a direct user action. Device paths and `content://`/`file://` URIs are converted to non-reversible local reference receipts before a journal entry is synchronized; photo pixels and audio binaries are not uploaded. Cancelled app-owned audio is deleted immediately when the platform permits it. A deployment that adds cloud upload must introduce a separate consent, retention, encryption and deletion design.
 
-On Android, explicitly requested avatar fitting uses bundled Google ML Kit face and pose runtimes. Google states that image inputs and inferred outputs remain on-device, but the SDK sends diagnostics and usage metrics such as device/app information, per-installation identifiers, latency, input/output size, feature events and errors; pose detection also uses Firebase Remote Config and Firebase Installations for diagnostics. These operational disclosures do not change the application's rule against uploading photo pixels, but they must be declared accurately in a production Google Play Data safety form. See the [ML Kit data-disclosure guide](https://developers.google.com/ml-kit/android-data-disclosure).
+The strict-local Android build deliberately disables automatic face/body photo fitting. The earlier Google ML Kit implementation was removed because SDK diagnostics and usage telemetry are incompatible with the stricter rule that native application egress is limited to a user-configured large-model API. Manual avatar adjustment remains available. Automatic native fitting must stay disabled until a separately audited detector can run fully offline without third-party telemetry or model downloads.
+
+The Web build is a different trust surface: its optional MediaPipe photo-fitting path may download pinned WASM/model assets after explicit user consent. Web behavior must not be described as evidence for the Android strict-local runtime.
 
 ## Retention and user rights
 
