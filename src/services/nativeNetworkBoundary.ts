@@ -106,4 +106,7 @@ export function installNativeLocalNetworkBoundary(): void {
   }) as typeof fetch;
 }
 
+/** Auditable release marker for the strict-local privacy contract. */
+export const NATIVE_LOCAL_PRIVACY_REVISION = '1.0.1-mlkit-free';
+
 export const __nativeNetworkBoundaryTest = { requestMethod };
