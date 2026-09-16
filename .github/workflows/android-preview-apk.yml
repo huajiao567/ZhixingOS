@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - ai/android-apk-preview-v1
+      - ai/android-native-smoke-v1
     paths:
       - ".github/workflows/android-preview-apk.yml"
       - "app.json"
@@ -100,7 +101,10 @@ jobs:
           npx expo prebuild --platform android --clean --no-install
           test -f android/gradlew
           test -f android/app/build.gradle
-          grep -R "com.zhixingos.satori" android/app/build.gradle android/app/src/main/AndroidManifest.xml >/dev/null
+          manifest=android/app/src/main/AndroidManifest.xml
+          grep -R "com.zhixingos.satori" android/app/build.gradle "$manifest" >/dev/null
+          grep -F 'android:allowBackup="false"' "$manifest"
+          grep -F 'android:usesCleartextTraffic="false"' "$manifest"
           chmod +x android/gradlew
 
       - name: Build standalone release APK
@@ -148,15 +152,25 @@ jobs:
           badging="$($aapt dump badging "$apk" | head -n 8)"
           printf '%s\n' "$badging"
           printf '%s\n' "$badging" | grep -F "package: name='com.zhixingos.satori'"
+          printf '%s\n' "$badging" | grep -F "versionCode='2'"
+          printf '%s\n' "$badging" | grep -F "versionName='1.0.1'"
 
+          version="$(node -p "require('./app.json').expo.version")"
+          version_code="$(node -p "require('./app.json').expo.android.versionCode")"
           mkdir -p artifacts/android-preview
-          out="artifacts/android-preview/ZhixingOS-1.0.0-preview.apk"
+          out="artifacts/android-preview/ZhixingOS-${version}-local-preview.apk"
           cp "$apk" "$out"
           sha256sum "$out" | tee artifacts/android-preview/SHA256SUMS.txt
           {
             echo "commit=${GITHUB_SHA}"
             echo "package=com.zhixingos.satori"
-            echo "variant=release-preview"
+            echo "version=${version}"
+            echo "versionCode=${version_code}"
+            echo "variant=local-only-release-preview"
+            echo "personalDataRuntime=device-local"
+            echo "externalNetworkBoundary=explicit-https-llm-api-only"
+            echo "androidAllowBackup=false"
+            echo "androidCleartextTraffic=false"
             echo "productionSigning=false"
             echo "physicalDeviceValidated=false"
           } > artifacts/android-preview/build-metadata.txt
@@ -165,7 +179,7 @@ jobs:
       - name: Upload installable APK
         uses: actions/upload-artifact@v7
         with:
-          name: zhixingos-android-preview-apk
+          name: zhixingos-android-local-preview-apk
           path: artifacts/android-preview/
           if-no-files-found: error
           retention-days: 14
