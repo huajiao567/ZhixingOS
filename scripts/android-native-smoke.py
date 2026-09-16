@@ -80,8 +80,27 @@ def center(bounds: str) -> tuple[int, int]:
     return (x1 + x2) // 2, (y1 + y2) // 2
 
 
+def focused_edit_text_present() -> bool:
+    root = dump()
+    return any(
+        node.attrib.get("class") == "android.widget.EditText"
+        and node.attrib.get("focused") == "true"
+        for node in root.iter("node")
+    )
+
+
 def tap(needle: str, timeout: float) -> None:
     node = wait_for(needle, timeout)
+    # UIAutomator can expose application nodes that are physically covered by the
+    # soft keyboard. A raw coordinate tap would then hit an IME key instead of the
+    # labelled control (the persistence smoke previously appended an extra "n" to
+    # the note this way). If a text field still owns focus, dismiss the IME first,
+    # re-dump the hierarchy, and only then tap the control at its current bounds.
+    if node.attrib.get("class") != "android.widget.EditText" and focused_edit_text_present():
+        run("shell", "input", "keyevent", "KEYCODE_BACK")
+        time.sleep(0.75)
+        node = wait_for(needle, timeout)
+        print(f"Dismissed focused Android IME before tapping {needle!r}")
     x, y = center(node.attrib.get("bounds", ""))
     run("shell", "input", "tap", str(x), str(y))
     print(f"Tapped {needle!r} at ({x}, {y})")
