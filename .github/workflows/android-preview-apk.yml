@@ -114,6 +114,26 @@ jobs:
           cd android
           ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
+      - name: Audit strict-local Android dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/android-preview
+          cd android
+          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --no-daemon > ../artifacts/android-preview/release-runtime-dependencies.txt
+          cd ..
+          if grep -Eqi 'com\.google\.mlkit|com\.google\.firebase|firebase-installations|firebase-config' artifacts/android-preview/release-runtime-dependencies.txt; then
+            echo "Strict-local APK contains a forbidden ML Kit/Firebase runtime dependency." >&2
+            grep -Ei 'com\.google\.mlkit|com\.google\.firebase|firebase-installations|firebase-config' artifacts/android-preview/release-runtime-dependencies.txt || true
+            exit 1
+          fi
+          if grep -R -En 'com\.google\.mlkit|com\.google\.firebase' modules/zhixing-vision/android src/mirror3d/avatar/photoFitting.ts; then
+            echo "Strict-local source still references a forbidden native telemetry SDK." >&2
+            exit 1
+          fi
+          echo "forbiddenNativeVisionDependencies=none" > artifacts/android-preview/privacy-audit.txt
+          echo "automaticNativePhotoFitting=disabled" >> artifacts/android-preview/privacy-audit.txt
+
       - name: Verify and package APK
         id: apk
         shell: bash
@@ -169,6 +189,8 @@ jobs:
             echo "variant=local-only-release-preview"
             echo "personalDataRuntime=device-local"
             echo "externalNetworkBoundary=explicit-https-llm-api-only"
+            echo "automaticNativePhotoFitting=disabled"
+            echo "forbiddenNativeVisionDependencies=none"
             echo "androidAllowBackup=false"
             echo "androidCleartextTraffic=false"
             echo "productionSigning=false"
