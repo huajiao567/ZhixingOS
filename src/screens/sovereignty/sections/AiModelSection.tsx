@@ -11,7 +11,7 @@ import { Card, Tag, PrimaryButton, Divider, useTextStyles } from '../../../compo
 import { Glyph } from '../../../components/glyphs';
 import { NativeLlmSettingsCard } from '../../../components/NativeLlmSettingsCard';
 import { useAppTheme } from '../../../theme/theme';
-import type { ServiceContract, ReflectionDepth, AgencyLevel, DataScopeAxis } from '../../../types/models';
+import type { ServiceContract, ReflectionDepth, DataScopeAxis } from '../../../types/models';
 
 interface Props {
   contract: ServiceContract | null;
@@ -23,14 +23,6 @@ const R_LABEL: Record<ReflectionDepth, string> = {
   R1: '加上模式提示',
   R2: '给出可反驳的猜想',
   R3: '提建议让我试',
-};
-
-const A_LABEL: Record<AgencyLevel, string> = {
-  A0: '只听我说',
-  A1: '给建议',
-  A2: '帮我准备',
-  A3: '帮我执行',
-  A4: '全自动',
 };
 
 const D_LABEL: Record<DataScopeAxis, string> = {
