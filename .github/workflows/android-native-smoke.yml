@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - ai/android-native-smoke-v1
+      - ai/android-native-record-persistence-v1
     paths:
       - ".github/workflows/android-native-smoke.yml"
       - "scripts/android-native-smoke.py"
@@ -209,6 +210,31 @@ jobs:
           python3 scripts/android-native-smoke.py dump
           adb exec-out screencap -p > artifacts/android-native/02-mirror-home-native-local.png
           cp artifacts/android-native/window.xml artifacts/android-native/02-mirror-home-window.xml
+
+          note="NativeSmokeNote20260916"
+          python3 scripts/android-native-smoke.py input-text "快速记录" "$note" --timeout 30
+          python3 scripts/android-native-smoke.py wait "发送" --timeout 15
+          python3 scripts/android-native-smoke.py tap "发送" --timeout 15
+          adb shell input keyevent KEYCODE_BACK || true
+          python3 scripts/android-native-smoke.py wait "已收进今天" --timeout 20
+          python3 scripts/android-native-smoke.py wait "$note" --timeout 20
+          python3 scripts/android-native-smoke.py dump
+          adb exec-out screencap -p > artifacts/android-native/03-text-record-saved.png
+          cp artifacts/android-native/window.xml artifacts/android-native/03-text-record-window.xml
+
+          # Force-stop/relaunch exercises actual AsyncStorage-backed persistence and auth restoration.
+          # No store injection and no backend process are involved.
+          adb shell am force-stop com.zhixingos.satori
+          sleep 2
+          adb shell monkey -p com.zhixingos.satori -c android.intent.category.LAUNCHER 1
+          python3 scripts/android-native-smoke.py wait "现在的我" --timeout 90
+          python3 scripts/android-native-smoke.py wait "$note" --timeout 60
+          sleep 10
+          python3 scripts/android-native-smoke.py assert-absent "原生 3D 数字人加载失败"
+          python3 scripts/android-native-smoke.py dump
+          adb exec-out screencap -p > artifacts/android-native/04-text-record-after-restart.png
+          cp artifacts/android-native/window.xml artifacts/android-native/04-text-record-after-restart-window.xml
+
           adb logcat -d -v threadtime > artifacts/android-native/logcat.txt
           adb shell dumpsys gfxinfo com.zhixingos.satori > artifacts/android-native/gfxinfo.txt || true
           app_uid="$(adb shell dumpsys package com.zhixingos.satori | sed -n 's/.*userId=\([0-9][0-9]*\).*/\1/p' | head -n 1 | tr -d '\r')"
@@ -219,6 +245,8 @@ jobs:
 
           test -s artifacts/android-native/01-auth-native-local.png
           test -s artifacts/android-native/02-mirror-home-native-local.png
+          test -s artifacts/android-native/03-text-record-saved.png
+          test -s artifacts/android-native/04-text-record-after-restart.png
           grep -F "[NativeNetworkBoundary] strict-local installed; only configured HTTPS LLM origin may egress" artifacts/android-native/logcat.txt
           if grep -F "[NativeNetworkBoundary] LLM_ALLOW" artifacts/android-native/logcat.txt; then
             echo "Native smoke performed an LLM network request without an explicitly configured endpoint." >&2
@@ -260,6 +288,9 @@ jobs:
             echo "networkBoundaryInstalled=true"
             echo "llmRequestObserved=false"
             echo "unexpectedBlockedRequestObserved=false"
+            echo "nativeTextRecordRoundTrip=true"
+            echo "processRestartPersistence=true"
+            echo "authSessionPersistence=true"
             echo "emulator=true"
             echo "emulatorSystemImage=aosp-default"
             echo "physicalDeviceValidated=false"
