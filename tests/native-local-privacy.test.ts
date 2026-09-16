@@ -22,7 +22,11 @@ test('strict-local native automatic photo fitting fails closed', () => {
 test('Android disables backup and cleartext traffic', () => {
   const app = JSON.parse(read('app.json'));
   assert.equal(app.expo.android.allowBackup, false);
-  assert.equal(app.expo.android.usesCleartextTraffic, false);
+  const buildProperties = app.expo.plugins.find((plugin: unknown) =>
+    Array.isArray(plugin) && plugin[0] === 'expo-build-properties',
+  );
+  assert.ok(buildProperties, 'expo-build-properties config is required');
+  assert.equal(buildProperties[1].android.usesCleartextTraffic, false);
 });
 
 test('native network boundary only permits explicitly configured HTTPS LLM origin', () => {
