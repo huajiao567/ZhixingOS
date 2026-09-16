@@ -59,6 +59,8 @@ export function installNativeLocalNetworkBoundary(): void {
   if (installed || !isNativeLocalOnlyRuntime()) return;
   installed = true;
 
+  console.info('[NativeNetworkBoundary] strict-local installed; only configured HTTPS LLM origin may egress');
+
   const originalFetch = globalThis.fetch.bind(globalThis);
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const rawUrl = requestUrl(input);
@@ -94,10 +96,12 @@ export function installNativeLocalNetworkBoundary(): void {
       const basePath = base.pathname.replace(/\/$/, '');
       const withinBasePath = !basePath || basePath === '/' || url.pathname === basePath || url.pathname.startsWith(`${basePath}/`);
       if (sameOrigin && withinBasePath && url.protocol === 'https:') {
+        console.info(`[NativeNetworkBoundary] LLM_ALLOW ${method} ${url.origin}${url.pathname}`);
         return originalFetch(input as any, init);
       }
     }
 
+    console.warn(`[NativeNetworkBoundary] BLOCKED ${method} ${url.origin}${url.pathname}`);
     throw new TypeError(`原生本地模式已阻止非大模型网络请求：${url.origin}${url.pathname}`);
   }) as typeof fetch;
 }
