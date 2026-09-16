@@ -2,17 +2,12 @@
  * 照片捏脸 + 体格拟合：从用户照片提取归一化特征，映射到 AvatarIdentity。
  *
  * ─── 隐私承诺（SubTask 16.5）─────────────────────────────────────────
- * 照片像素只在本设备/浏览器会话中处理，不作为 MediaPipe 输入数据上传。
- *   - Web：图片在浏览器内解码后送入构建产物中的 MediaPipe
- *         FaceLandmarker / PoseLandmarker 懒加载 chunk；只有用户明确同意并开始
- *         照片拟合时才加载该 JS。WASM 与模型按固定版本从外部源下载。
- *         MediaPipe 官方说明不发送输入图像数据，但 Tasks API 可能发送
- *         性能/使用指标。
- *   - Android：通过本项目的本地 Expo Module 调用随 APK 打包的 ML Kit
- *              Face Detection 与 Pose Detection；首次使用无需下载模型，
- *              照片像素不离开设备。
- * 提取出的归一化 metrics 仅保留 0..1 数值，不包含原始像素或可识别身份
- * 的信息。所有比例计算与人类学参考区间在 `fittingMath.ts` 中可审计。
+ *   - Web：图片在浏览器内解码后送入 MediaPipe Tasks；只有用户明确同意并开始
+ *     照片拟合时才加载相关 JS/WASM/模型。Web 路径不属于 Android 严格本地承诺。
+ *   - Android/iOS strict-local：自动照片拟合当前关闭。旧的 Android ML Kit
+ *     实现已移除，因为 SDK 诊断/使用遥测与“除显式 LLM API 外不出网”边界冲突。
+ *     用户仍可手动调整三维形象；待引入经过独立审计的无遥测离线检测器后再恢复。
+ * 所有比例计算与人类学参考区间在 `fittingMath.ts` 中可审计。
  * ────────────────────────────────────────────────────────────────────
  */
 
@@ -20,6 +15,7 @@ import { Platform } from 'react-native';
 import {
   detectNativeFaceLandmarks,
   detectNativePoseLandmarks,
+  hasNativePhotoFitting,
 } from '../../../modules/zhixing-vision';
 import type { AvatarIdentity } from '../types/avatar';
 import {
@@ -187,13 +183,14 @@ function decodeImage(uri: string): Promise<HTMLImageElement> {
 
 /**
  * 从一张照片提取归一化面部特征。
- * 失败（返回 null）：图中无人脸、图片不可读或端侧检测器明确报错。
+ * 原生 strict-local 在无遥测离线检测器落地前直接返回 null。
  */
 export async function extractFaceMetrics(
   imageUri: string,
 ): Promise<NormalizedFaceMetrics | null> {
   try {
     if (Platform.OS !== 'web') {
+      if (!hasNativePhotoFitting()) return null;
       const result = await detectNativeFaceLandmarks(imageUri);
       if (!result || result.landmarks.length === 0) return null;
       const aspect = result.width > 0 && result.height > 0 ? result.width / result.height : 1;
@@ -213,13 +210,14 @@ export async function extractFaceMetrics(
 
 /**
  * 从一张照片提取归一化体格特征（肩宽/头身比/肩髋比）。
- * 半身照返回 shoulders=true 的部分结果；头部或双肩不可见返回 null。
+ * 原生 strict-local 在无遥测离线检测器落地前直接返回 null。
  */
 export async function extractBodyMetrics(
   imageUri: string,
 ): Promise<NormalizedBodyMetrics | null> {
   try {
     if (Platform.OS !== 'web') {
+      if (!hasNativePhotoFitting()) return null;
       const result = await detectNativePoseLandmarks(imageUri);
       if (!result || result.landmarks.length === 0) return null;
       const aspect = result.width > 0 && result.height > 0 ? result.width / result.height : 1;
@@ -238,10 +236,13 @@ export async function extractBodyMetrics(
 }
 
 /**
- * 一键「图片转3D」入口：同一张照片同时做人脸 + 体格分析。
- * 任一失败不影响另一项（脸照通常测不到脚踝，体格退化为肩宽参考）。
+ * 一键「图片转3D」入口：Web 可执行照片分析；strict-local native 当前
+ * 返回空拟合结果，由编辑器保留手动调整路径。
  */
 export async function extractPhotoFitting(imageUri: string): Promise<FaceFittingResult> {
+  if (Platform.OS !== 'web' && !hasNativePhotoFitting()) {
+    return { face: null, body: null };
+  }
   const [face, body] = await Promise.all([
     extractFaceMetrics(imageUri),
     extractBodyMetrics(imageUri),
@@ -258,12 +259,13 @@ export async function extractPhotoFitting(imageUri: string): Promise<FaceFitting
 export async function captureMultiViewMetrics(
   captureFn: (view: ViewKind) => Promise<string | null>,
 ): Promise<NormalizedFaceMetrics | null> {
+  if (Platform.OS !== 'web' && !hasNativePhotoFitting()) return null;
   const views: ViewKind[] = ['front', 'side', 'angle'];
   const samples: { view: ViewKind; metrics: NormalizedFaceMetrics }[] = [];
 
   for (const view of views) {
     const uri = await captureFn(view);
-    if (!uri) continue; // 用户跳过该视角
+    if (!uri) continue;
     const metrics = await extractFaceMetrics(uri);
     if (metrics) samples.push({ view, metrics });
   }

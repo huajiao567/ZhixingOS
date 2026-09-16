@@ -1,0 +1,293 @@
+name: Android native smoke
+
+on:
+  push:
+    branches:
+      - master
+      - ai/android-native-smoke-v1
+    paths:
+      - ".github/workflows/android-native-smoke.yml"
+      - "scripts/android-native-smoke.py"
+      - "tests/native-local-privacy.test.ts"
+      - "app.json"
+      - "package.json"
+      - "package-lock.json"
+      - "babel.config.js"
+      - "index.ts"
+      - "App.tsx"
+      - "assets/**"
+      - "public/avatar/**"
+      - "src/**"
+      - "modules/**"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/android-native-smoke.yml"
+      - "scripts/android-native-smoke.py"
+      - "tests/native-local-privacy.test.ts"
+      - "app.json"
+      - "package.json"
+      - "package-lock.json"
+      - "babel.config.js"
+      - "index.ts"
+      - "App.tsx"
+      - "assets/**"
+      - "public/avatar/**"
+      - "src/**"
+      - "modules/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zhixingos-android-native-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-native-smoke:
+    name: Android emulator 390x844 local-only smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CI: "1"
+      NODE_ENV: production
+      AVD_NAME: zhixingos-ci
+      SYSTEM_IMAGE: system-images;android-35;default;x86_64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Ensure Android SDK, emulator and system image
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager_bin="$(command -v sdkmanager || true)"
+          if [ -z "$sdkmanager_bin" ] && [ -n "${ANDROID_HOME:-}" ]; then
+            sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' -print -quit 2>/dev/null || true)"
+          fi
+          if [ -z "$sdkmanager_bin" ]; then
+            echo "sdkmanager was not found under ANDROID_HOME=${ANDROID_HOME:-unset}" >&2
+            exit 1
+          fi
+          commandline_tools_bin="$(dirname "$sdkmanager_bin")"
+          avdmanager_bin="$commandline_tools_bin/avdmanager"
+          if [ ! -x "$avdmanager_bin" ]; then
+            echo "avdmanager was not found next to sdkmanager at $commandline_tools_bin" >&2
+            exit 1
+          fi
+          echo "SDKMANAGER=$sdkmanager_bin"
+          echo "AVDMANAGER=$avdmanager_bin"
+          yes | "$sdkmanager_bin" --licenses >/dev/null || true
+          "$sdkmanager_bin" \
+            "platform-tools" \
+            "emulator" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;27.1.12297006" \
+            "$SYSTEM_IMAGE"
+          echo "$commandline_tools_bin" >> "$GITHUB_PATH"
+          echo "${ANDROID_HOME}/platform-tools" >> "$GITHUB_PATH"
+          echo "${ANDROID_HOME}/emulator" >> "$GITHUB_PATH"
+
+      - name: Build release-preview APK for emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/android-native
+          npx expo prebuild --platform android --clean --no-install
+          manifest=android/app/src/main/AndroidManifest.xml
+          test -f "$manifest"
+          grep -F 'android:allowBackup="false"' "$manifest"
+          grep -F 'android:usesCleartextTraffic="false"' "$manifest"
+          chmod +x android/gradlew
+          cd android
+          ./gradlew :app:assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --stacktrace
+          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --no-daemon > ../artifacts/android-native/release-runtime-dependencies.txt
+          cd ..
+          if grep -Eqi 'com\.google\.mlkit|com\.google\.firebase|firebase-installations|firebase-config' artifacts/android-native/release-runtime-dependencies.txt; then
+            echo "Strict-local native smoke contains a forbidden ML Kit/Firebase runtime dependency." >&2
+            grep -Ei 'com\.google\.mlkit|com\.google\.firebase|firebase-installations|firebase-config' artifacts/android-native/release-runtime-dependencies.txt || true
+            exit 1
+          fi
+          if grep -R -En 'com\.google\.mlkit|com\.google\.firebase' modules/zhixing-vision/android src/mirror3d/avatar/photoFitting.ts; then
+            echo "Strict-local native source still references a forbidden native telemetry SDK." >&2
+            exit 1
+          fi
+          {
+            echo "forbiddenNativeVisionDependencies=none"
+            echo "automaticNativePhotoFitting=disabled"
+            echo "smokeAbi=x86_64"
+            echo "emulatorSystemImage=aosp-default"
+          } > artifacts/android-native/privacy-audit.txt
+
+      - name: Boot Android emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+          else
+            echo "/dev/kvm is unavailable; hosted-runner native emulator acceptance cannot run." >&2
+            exit 1
+          fi
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          avdmanager_bin="$(command -v avdmanager)"
+          emulator_bin="$(command -v emulator)"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME"
+          echo "AVDMANAGER=$avdmanager_bin"
+          echo "EMULATOR=$emulator_bin"
+          echo "no" | "$avdmanager_bin" create avd --force --name "$AVD_NAME" --package "$SYSTEM_IMAGE" --device "pixel_6"
+          echo "AVDs after creation:"
+          "$emulator_bin" -list-avds
+          find "$ANDROID_AVD_HOME" -maxdepth 2 -type f -print | sort
+          "$emulator_bin" "@$AVD_NAME" \
+            -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \
+            -gpu swiftshader_indirect -accel auto \
+            > /tmp/zhixingos-emulator.log 2>&1 &
+          adb wait-for-device
+          for i in {1..120}; do
+            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+              break
+            fi
+            sleep 2
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          # Acceptance uses 1 px = 1 dp so this is a genuine 390x844 logical viewport,
+          # not an attempt to model a particular phone's physical panel density.
+          adb shell wm size 390x844
+          adb shell wm density 160
+          adb shell input keyevent 82 || true
+          adb shell wm size
+          adb shell wm density
+
+      - name: Install and exercise backend-free native app
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/android-native
+          apk="$(find android/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | sort | head -n 1)"
+          test -n "$apk"
+          adb install -r "$apk"
+          adb shell am force-stop com.zhixingos.satori
+          adb logcat -c
+          adb shell monkey -p com.zhixingos.satori -c android.intent.category.LAUNCHER 1
+
+          python3 scripts/android-native-smoke.py wait "知行镜" --timeout 60
+          python3 scripts/android-native-smoke.py wait "原生本地模式" --timeout 30
+          adb exec-out screencap -p > artifacts/android-native/01-auth-native-local.png
+          cp artifacts/android-native/window.xml artifacts/android-native/01-auth-window.xml
+
+          python3 scripts/android-native-smoke.py tap "使用演示账号体验" --timeout 30
+          python3 scripts/android-native-smoke.py tap "登录账号" --timeout 30
+          python3 scripts/android-native-smoke.py wait "现在的我" --timeout 120
+
+          sleep 20
+          python3 scripts/android-native-smoke.py assert-absent "原生 3D 数字人加载失败"
+          python3 scripts/android-native-smoke.py dump
+          adb exec-out screencap -p > artifacts/android-native/02-mirror-home-native-local.png
+          cp artifacts/android-native/window.xml artifacts/android-native/02-mirror-home-window.xml
+          adb logcat -d -v threadtime > artifacts/android-native/logcat.txt
+          adb shell dumpsys gfxinfo com.zhixingos.satori > artifacts/android-native/gfxinfo.txt || true
+          app_uid="$(adb shell dumpsys package com.zhixingos.satori | sed -n 's/.*userId=\([0-9][0-9]*\).*/\1/p' | head -n 1 | tr -d '\r')"
+          printf 'uid=%s\n' "$app_uid" > artifacts/android-native/network-audit.txt
+          if [ -n "$app_uid" ]; then
+            adb shell dumpsys netstats detail | grep -E "uid=${app_uid}([^0-9]|$)" >> artifacts/android-native/network-audit.txt || true
+          fi
+
+          test -s artifacts/android-native/01-auth-native-local.png
+          test -s artifacts/android-native/02-mirror-home-native-local.png
+          grep -F "[NativeNetworkBoundary] strict-local installed; only configured HTTPS LLM origin may egress" artifacts/android-native/logcat.txt
+          if grep -F "[NativeNetworkBoundary] LLM_ALLOW" artifacts/android-native/logcat.txt; then
+            echo "Native smoke performed an LLM network request without an explicitly configured endpoint." >&2
+            exit 1
+          fi
+          if grep -F "[NativeNetworkBoundary] BLOCKED" artifacts/android-native/logcat.txt; then
+            echo "Native smoke attempted an unexpected non-LLM network request." >&2
+            exit 1
+          fi
+          if grep -F "[Avatar/Native] 3D render failed" artifacts/android-native/logcat.txt; then
+            echo "Native Avatar V2 emitted a fatal 3D renderer error." >&2
+            exit 1
+          fi
+          if grep -F "FATAL EXCEPTION" artifacts/android-native/logcat.txt; then
+            echo "Android process emitted a FATAL EXCEPTION." >&2
+            exit 1
+          fi
+          if grep -E "10\.0\.2\.2:3001|localhost:3001|127\.0\.0\.1:3001" artifacts/android-native/logcat.txt; then
+            echo "Native local-only smoke observed a legacy backend endpoint in runtime logs." >&2
+            exit 1
+          fi
+          if grep -Ei "mlkit|firebaseinstallations|firebase-config|storage\.googleapis\.com/mediapipe|cdn\.jsdelivr\.net/npm/@mediapipe" artifacts/android-native/logcat.txt; then
+            echo "Native strict-local smoke observed a forbidden vision/telemetry runtime signature." >&2
+            exit 1
+          fi
+          {
+            echo "commit=${GITHUB_SHA}"
+            echo "viewport=390x844"
+            echo "viewportLogicalDp=390x844"
+            echo "devicePixels=390x844"
+            echo "densityDpi=160"
+            echo "emulatorPhysicalBacking=1080x2400"
+            echo "package=com.zhixingos.satori"
+            echo "backend=none"
+            echo "personalDataRuntime=device-local"
+            echo "externalNetworkBoundary=explicit-https-llm-api-only"
+            echo "automaticNativePhotoFitting=disabled"
+            echo "forbiddenNativeVisionDependencies=none"
+            echo "networkBoundaryInstalled=true"
+            echo "llmRequestObserved=false"
+            echo "unexpectedBlockedRequestObserved=false"
+            echo "emulator=true"
+            echo "emulatorSystemImage=aosp-default"
+            echo "physicalDeviceValidated=false"
+            echo "productionSigning=false"
+          } > artifacts/android-native/metadata.txt
+
+      - name: Upload Android native evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-native-local-only-evidence
+          path: |
+            artifacts/android-native/
+            /tmp/zhixingos-emulator.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Print diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "===== emulator ====="
+          tail -n 300 /tmp/zhixingos-emulator.log || true
+          echo "===== adb devices ====="
+          timeout 10s adb devices -l || true
+          echo "===== logcat tail ====="
+          if timeout 5s adb get-state >/dev/null 2>&1; then
+            timeout 10s adb logcat -d -v threadtime | tail -n 500 || true
+          else
+            echo "No Android device booted; skipping logcat."
+          fi
