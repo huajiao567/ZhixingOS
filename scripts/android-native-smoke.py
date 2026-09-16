@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Small deterministic UIAutomator driver for ZhixingOS Android smoke CI.
 
-This is intentionally not a general device automation framework.  It drives only
+This is intentionally not a general device automation framework. It drives only
 accessibility-labelled controls that already exist in the product UI, and keeps
 all interaction at the Android input layer (no React/store injection).
 """
@@ -9,6 +9,7 @@ all interaction at the Android input layer (no React/store injection).
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 import time
@@ -17,6 +18,7 @@ from pathlib import Path
 
 REMOTE_DUMP = "/sdcard/zhixingos-window.xml"
 LOCAL_DUMP = Path("artifacts/android-native/window.xml")
+SAFE_INPUT_RE = re.compile(r"^[A-Za-z0-9._@\- ]+$")
 
 
 def run(*args: str, capture: bool = False) -> str:
@@ -69,8 +71,6 @@ def wait_for(needle: str, timeout: float) -> ET.Element:
 
 def center(bounds: str) -> tuple[int, int]:
     # UIAutomator format: [x1,y1][x2,y2]
-    import re
-
     match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
     if not match:
         raise SystemExit(f"Unexpected UIAutomator bounds: {bounds!r}")
@@ -85,6 +85,21 @@ def tap(needle: str, timeout: float) -> None:
     x, y = center(node.attrib.get("bounds", ""))
     run("shell", "input", "tap", str(x), str(y))
     print(f"Tapped {needle!r} at ({x}, {y})")
+
+
+def input_text(needle: str, text: str, timeout: float) -> None:
+    if not text or not SAFE_INPUT_RE.fullmatch(text):
+        raise SystemExit(
+            "input-text accepts only deterministic ASCII letters, digits, spaces and ._@-"
+        )
+    node = wait_for(needle, timeout)
+    x, y = center(node.attrib.get("bounds", ""))
+    run("shell", "input", "tap", str(x), str(y))
+    # Android's input command represents spaces as %s. Keep the accepted alphabet
+    # deliberately narrow so no shell quoting or IME-specific Unicode behavior is involved.
+    encoded = text.replace(" ", "%s")
+    run("shell", "input", "text", encoded)
+    print(f"Entered {text!r} into {needle!r} at ({x}, {y})")
 
 
 def assert_absent(needle: str) -> None:
@@ -106,6 +121,11 @@ def main() -> None:
     tap_p.add_argument("needle")
     tap_p.add_argument("--timeout", type=float, default=60)
 
+    input_p = sub.add_parser("input-text")
+    input_p.add_argument("needle")
+    input_p.add_argument("text")
+    input_p.add_argument("--timeout", type=float, default=60)
+
     absent_p = sub.add_parser("assert-absent")
     absent_p.add_argument("needle")
 
@@ -117,6 +137,8 @@ def main() -> None:
         print(f"Found {args.needle!r}: {node.attrib}")
     elif args.command == "tap":
         tap(args.needle, args.timeout)
+    elif args.command == "input-text":
+        input_text(args.needle, args.text, args.timeout)
     elif args.command == "assert-absent":
         assert_absent(args.needle)
     elif args.command == "dump":
